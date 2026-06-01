@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import requests
+
 from atlas_core.router_engine import (
     AgentCapability,
     AgentManifest,
@@ -33,6 +35,10 @@ from atlas_core.router_engine import (
 )
 
 logger = logging.getLogger("atlas.core")
+
+# ── LLM 配置 ──────────────────────────────────
+HERMES_API_URL = "http://localhost:8642/v1/chat/completions"
+HERMES_MODEL = "deepseek"
 
 # ---------------------------------------------------------------------------
 # 语音引擎的惰性导入 / Lazy import for voice engine (optional dependency)
@@ -175,6 +181,61 @@ class Atlas:
             logger.error("Voice engine: init failed — %s", e)
 
     # ------------------------------------------------------------------
+    # LLM 查询 / LLM query
+    # ------------------------------------------------------------------
+
+    def _llm_query(self, messages: list[dict], timeout: int = 60) -> str:
+        """调用本地 Hermes API (DeepSeek) 生成回复 / Call local Hermes API for LLM response"""
+        try:
+            resp = requests.post(
+                HERMES_API_URL,
+                json={"model": HERMES_MODEL, "messages": messages},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
+        except requests.ConnectionError:
+            logger.error("LLM unavailable — Hermes API at %s", HERMES_API_URL)
+            return "系统内部错误：AI 模型暂时不可用。请稍后再试。"
+        except Exception as e:
+            logger.error("LLM query failed: %s", e)
+            return f"抱歉，我遇到了一个技术问题: {e}"
+
+    def _llm_query_stream(self, messages: list[dict], timeout: int = 120):
+        """流式调用 Hermes API，逐 token 产出 / Stream LLM response token by token
+
+        Yields:
+            str: 文本片段 (tokens)
+        """
+        try:
+            resp = requests.post(
+                HERMES_API_URL,
+                json={"model": HERMES_MODEL, "messages": messages, "stream": True},
+                timeout=timeout,
+                stream=True,
+            )
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                if line.startswith(b"data: "):
+                    data_str = line[6:]
+                    if data_str.strip() == b"[DONE]":
+                        break
+                    try:
+                        data = json.loads(data_str)
+                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            logger.error("Stream LLM failed: %s", e)
+            yield f"\n\n[Error: {e}]"
+
+    # ------------------------------------------------------------------
     # 核心处理方法 / Core process method
     # ------------------------------------------------------------------
 
@@ -228,7 +289,7 @@ class Atlas:
             if memory_lines:
                 memory_context = "Previously remembered / 之前记住的内容:\n" + "\n".join(memory_lines)
 
-        # Step 5: 构建响应 / Build response
+        # Step 5
         response = self._build_response(text, intent_result, memory_context)
 
         # Step 6: 保存到记忆（重要对话） / Save important conversations to memory
@@ -255,6 +316,107 @@ class Atlas:
             "memories_recalled": len(memories),
             "memory_context": memory_context,
             "timestamp": timestamp,
+        }
+
+    def process_stream(self, text: str):
+        """流式处理用户输入，逐阶段产出 SSE 事件 / Stream-process user input yielding SSE events
+
+        Yields:
+            dict: SSE 事件对象，包含 type 和 data 字段
+        """
+        text = text.strip()
+        if not text:
+            yield {"type": "error", "data": "Empty input / 输入为空"}
+            return
+
+        self._query_count += 1
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        # Step 1: 记录对话历史
+        yield {"type": "message_received", "data": {"text": text, "timestamp": timestamp}}
+        self._add_to_history("user", text)
+
+        # Step 2: 意图路由
+        yield {"type": "intent_analyzing", "data": {"status": "routing"}}
+        intent_result = self.router.analyze(text)
+        yield {
+            "type": "intent_result",
+            "data": {
+                "intent": intent_result.primary_intent.value if intent_result.primary_intent else "general",
+                "confidence": intent_result.confidence,
+                "matched_agents": intent_result.matched_agents,
+            },
+        }
+
+        # Step 3: 检索记忆
+        yield {"type": "memory_recalling", "data": {"status": "searching"}}
+        memories = []
+        if self._memory_enabled and self._memory_store:
+            try:
+                memories = self._memory_store.recall(text, limit=5)
+            except Exception as e:
+                logger.warning("Memory recall failed: %s", e)
+        yield {"type": "memory_result", "data": {"count": len(memories), "items": memories[:3]}}
+
+        # Step 4: 构建上下文
+        memory_context = ""
+        if memories:
+            memory_lines = []
+            for m in memories:
+                content = m.get("content", "")
+                key = m.get("key", "")
+                if content:
+                    memory_lines.append(f"[{key}] {content}")
+            if memory_lines:
+                memory_context = "Previously remembered / 之前记住的内容:\n" + "\n".join(memory_lines)
+
+        # Step 5
+        yield {"type": "stream_start", "data": {"timestamp": timestamp}}
+        system_prompt = self._build_system_prompt(intent_result, memory_context)
+        messages = [{"role": "system", "content": system_prompt}]
+        history_pairs = self.conversation_history[-12:]
+        for msg in history_pairs:
+            role = "assistant" if msg["role"] == "assistant" else "user"
+            messages.append({"role": role, "content": msg["content"]})
+        if not history_pairs or history_pairs[-1]["content"] != text:
+            messages.append({"role": "user", "content": text})
+
+        full_response = ""
+        for token in self._llm_query_stream(messages):
+            full_response += token
+            yield {"type": "stream_chunk", "data": {"token": token}}
+
+        yield {"type": "stream_end", "data": {"full_response": full_response}}
+
+        # Step 6: 保存到记忆
+        if self._memory_enabled and self._memory_store and intent_result.confidence > 0.3:
+            try:
+                self._memory_store.save(
+                    key=f"conversation_{int(time.time())}",
+                    content=f"Q: {text}\nA: {full_response}",
+                    type="conversation",
+                    tags=[intent_result.primary_intent.value if intent_result.primary_intent else "general"],
+                    importance=min(intent_result.confidence, 0.9),
+                )
+                yield {"type": "memory_saved", "data": {"key": f"conversation_{int(time.time())}"}}
+            except Exception as e:
+                logger.warning("Memory save failed: %s", e)
+                yield {"type": "memory_save_failed", "data": {"error": str(e)}}
+
+        # Step 7: 记录回复历史
+        self._add_to_history("assistant", full_response)
+
+        # 最终回复事件
+        yield {
+            "type": "response",
+            "data": {
+                "response": full_response,
+                "intent": intent_result.primary_intent.value if intent_result.primary_intent else "unknown",
+                "confidence": intent_result.confidence,
+                "matched_agents": intent_result.matched_agents,
+                "memories_recalled": len(memories),
+                "timestamp": timestamp,
+            },
         }
 
     # ------------------------------------------------------------------
@@ -451,110 +613,56 @@ class Atlas:
     # 内部方法 / Internal methods
     # ------------------------------------------------------------------
 
-    def _build_response(self, text: str, intent: IntentResult, memory_context: str) -> str:
-        """根据意图构建自然语言响应 / Build natural language response from intent"""
-        if intent.confidence == 0.0:
-            return (
-                f"I'm not sure how to help with that. I can handle topics like "
-                f"finance, images, video, e-commerce, system monitoring, and more. "
-                f"Type 'help' to see what I can do.\n\n"
-                f"我不知道如何帮您处理这个问题。我可以处理金融、图像、视频、电商、"
-                f"系统监控等话题。输入 'help' 查看我的能力。"
-            )
+    def _build_system_prompt(self, intent: IntentResult, memory_context: str) -> str:
+        """构建 LLM 系统提示词 / Build system prompt for the LLM"""
+        agents_desc = []
+        for cap in AgentCapability:
+            agents = self.router.list_by_capability(cap)
+            if agents:
+                names = ", ".join(a.name for a in agents)
+                agents_desc.append(f"- {cap.value}: {names}")
 
-        primary = intent.primary_intent
-        agent_name = intent.matched_agents[0][0] if intent.matched_agents else "unknown"
+        agents_str = "\n".join(agents_desc)
 
-        # 按能力分类构建响应 / Build response by capability
-        responses = {
-            AgentCapability.FINANCE_PREDICTION: (
-                f"I detected a finance-related query. The {agent_name} can help with "
-                f"stock prediction, factor analysis, and portfolio optimization.\n\n"
-                f"我识别到金融相关查询。{agent_name} 可以帮助进行股票预测、因子分析和投资组合优化。"
-            ),
-            AgentCapability.SCREENPLAY_WRITING: (
-                f"I detected a screenplay-related query. The {agent_name} can help with "
-                f"script writing, character development, and plot structure.\n\n"
-                f"我识别到剧本相关查询。{agent_name} 可以帮助进行剧本写作、角色和情节开发。"
-            ),
-            AgentCapability.IMAGE_GENERATION: (
-                f"I detected an image generation request. The {agent_name} can help with "
-                f"text-to-image generation, style transfer, and image editing.\n\n"
-                f"我识别到图像生成请求。{agent_name} 可以生成图像、风格迁移和图像编辑。"
-            ),
-            AgentCapability.VIDEO_PRODUCTION: (
-                f"I detected a video production request. The {agent_name} can help with "
-                f"video generation, editing, subtitles, and effects.\n\n"
-                f"我识别到视频制作请求。{agent_name} 可以生成视频、编辑、添加字幕和特效。"
-            ),
-            AgentCapability.MARKET_MONITORING: (
-                f"I detected a market monitoring request. The {agent_name} can help with "
-                f"real-time market data, trend analysis, and risk alerts.\n\n"
-                f"我识别到市场监控请求。{agent_name} 可以提供实时行情、趋势分析和风险预警。"
-            ),
-            AgentCapability.CROSS_DOMAIN_LEARNING: (
-                f"I detected a learning-related query. The {agent_name} can help with "
-                f"cross-domain knowledge transfer and research.\n\n"
-                f"我识别到学习相关查询。{agent_name} 可以帮助跨领域知识迁移和研究。"
-            ),
-            AgentCapability.ECOMMERCE_OPS: (
-                f"I detected an e-commerce query. The {agent_name} can help with "
-                f"product management, order analysis, and inventory tracking.\n\n"
-                f"我识别到电商相关查询。{agent_name} 可以帮助商品管理、订单分析和库存跟踪。"
-            ),
-            AgentCapability.SHORT_VIDEO_OPS: (
-                f"I detected a short video query. The {agent_name} can help with "
-                f"content strategy, engagement analysis, and trend optimization.\n\n"
-                f"我识别到短视频相关查询。{agent_name} 可以提供内容策略、互动分析和趋势优化。"
-            ),
-            AgentCapability.SWARM_SIMULATION: (
-                f"I detected a swarm intelligence query. The {agent_name} can help with "
-                f"prediction aggregation, consensus mechanisms, and multi-agent simulation.\n\n"
-                f"我识别到群体智能查询。{agent_name} 可以处理预测聚合、共识机制和多智能体模拟。"
-            ),
-            AgentCapability.SYSTEM_MONITORING: (
-                f"I detected a system monitoring query. The {agent_name} can help with "
-                f"service health checks, resource monitoring, and anomaly detection.\n\n"
-                f"我识别到系统监控查询。{agent_name} 可以检查服务健康、监控资源和异常检测。"
-            ),
-            AgentCapability.FAULT_ANALYSIS: (
-                f"I detected a fault analysis query. The {agent_name} can help with "
-                f"error diagnosis, root cause analysis, and recovery planning.\n\n"
-                f"我识别到故障分析查询。{agent_name} 可以诊断错误、分析根因和制定恢复计划。"
-            ),
-            AgentCapability.TOKEN_MANAGEMENT: (
-                f"I detected a token budget query. The {agent_name} can help with "
-                f"usage tracking, cost optimization, and quota management.\n\n"
-                f"我识别到Token预算查询。{agent_name} 可以跟踪用量、优化成本和配额管理。"
-            ),
-            AgentCapability.CREATIVE_COORDINATION: (
-                f"I detected a creative coordination query. The {agent_name} can help with "
-                f"project pipeline management, multi-modal creation, and team collaboration.\n\n"
-                f"我识别到创意协调查询。{agent_name} 可以管理项目管线、多模态创作和团队协作。"
-            ),
-            AgentCapability.TASK_ORCHESTRATION: (
-                f"I detected a task orchestration query. The {agent_name} can help with "
-                f"workflow automation, dependency management, and job scheduling.\n\n"
-                f"我识别到任务编排查询。{agent_name} 可以自动化工作流、管理依赖和调度作业。"
-            ),
-        }
+        intent_str = intent.primary_intent.value if intent.primary_intent else "general"
+        ag_str = ", ".join(f"{n}({c:.0%})" for n, c in (intent.matched_agents or []))
+        memory_str = f"\n相关记忆:\n{memory_context}" if memory_context else ""
 
-        base_response = responses.get(
-            primary,
-            f"I detected a query that maps to {agent_name} "
-            f"(confidence: {intent.confidence * 100:.0f}%).\n\n"
-            f"我识别到匹配 {agent_name} 的查询（置信度: {intent.confidence * 100:.0f}%）。"
+        return (
+            f"你是 Atlas，一个全能的 AI 助手，运行在本地系统上。\n\n"
+            f"你的特性:\n"
+            f"- 使用中文回复，除非用户用英文提问\n"
+            f"- 友好、专业、简洁\n"
+            f"- 可以调用以下专业 Agent 完成任务:\n{agents_str}\n\n"
+            f"当前意图分析:\n"
+            f"- 意图: {intent_str} (置信度: {intent.confidence:.0%})\n"
+            f"- 匹配 Agent: {ag_str or '无'}{memory_str}\n"
+            f"- 对话历史: {len(self.conversation_history)} 条\n\n"
+            f"请基于以上上下文回答用户问题。如果意图匹配了特定 Agent，"
+            f"请说明你可以调用哪个 Agent 来帮忙，并直接给出有用信息。"
+            f"如果是一般闲聊，直接正常对话即可。"
         )
 
-        # 添加记忆上下文信息 / Add memory context info
-        if memory_context:
-            base_response += f"\n\n[Memory / 记忆提示] {memory_context[:200]}"
+    def _build_response(self, text: str, intent: IntentResult, memory_context: str) -> str:
+        """根据意图构建自然语言响应 / Build natural language response from intent"""
+        # 构建系统提示词
+        system_prompt = self._build_system_prompt(intent, memory_context)
 
-        # 添加建议命令 / Add suggested command
-        if intent.suggested_command:
-            base_response += f"\n\nSuggested command / 建议命令: {intent.suggested_command}"
+        # 构建消息列表（包含对话历史）
+        messages = [{"role": "system", "content": system_prompt}]
 
-        return base_response
+        # 添加上下文窗口内的历史消息（最多最近6轮）
+        history_pairs = self.conversation_history[-12:]  # 6轮对话 = 12条
+        for msg in history_pairs:
+            role = "assistant" if msg["role"] == "assistant" else "user"
+            messages.append({"role": role, "content": msg["content"]})
+
+        # 添加当前用户消息（避免重复）
+        if not history_pairs or history_pairs[-1]["content"] != text:
+            messages.append({"role": "user", "content": text})
+
+        # 调用 LLM
+        return self._llm_query(messages)
 
     def _add_to_history(self, role: str, content: str):
         """添加消息到对话历史 / Add a message to conversation history"""
