@@ -3,94 +3,269 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Atlas Agent — WebUI</title>
+  <title>Atlas — Memory Graph</title>
   <link rel="stylesheet" href="style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🧠</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="app-container">
-    <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <h1 class="logo">🧠 Atlas</h1>
-        <span class="badge" id="versionBadge">v0.5.0</span>
+
+  <!-- ── Force-Directed Memory Graph ── -->
+  <canvas id="graphCanvas"></canvas>
+
+  <!-- ── Chat Bubbles Layer ── -->
+  <div class="chat-layer" id="chatLayer"></div>
+
+  <!-- ═══ Primary Panel (Left) ═══ -->
+  <aside class="panel primary-panel" id="primaryPanel">
+    <div class="panel-header">
+      <div class="logo-mark">◈</div>
+      <div class="logo-copy">
+        <div class="logo-eyebrow">认知界面</div>
+        <div class="logo-name">Atlas AI Agent</div>
       </div>
+    </div>
 
-      <div class="status-bar" id="statusBar">
-        <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">Initializing...</span>
-      </div>
+    <div class="status-strip">
+      <span class="status-chip"><span class="dot"></span>在线</span>
+      <span class="status-chip" id="modelChip">DeepSeek</span>
+      <span class="status-chip" id="tickChip">Tick 0</span>
+    </div>
 
-      <nav class="sidebar-nav">
-        <button class="nav-btn active" data-tab="chat" onclick="switchTab('chat')">
-          💬 Chat
-        </button>
-        <button class="nav-btn" data-tab="agents" onclick="switchTab('agents')">
-          🤖 Agents
-        </button>
-        <button class="nav-btn" data-tab="routes" onclick="switchTab('routes')">
-          🗺️ Routes
-        </button>
-      </nav>
-
-      <div class="sidebar-footer">
-        <button class="clear-btn" onclick="clearChat()">🗑️ Clear Chat</button>
-        <div class="theme-toggle">
-          <button onclick="toggleTheme()">🌙 Dark</button>
+    <div class="panel-section">
+      <div class="section-label">图谱调节</div>
+      <div class="graph-controls">
+        <div class="graph-control-row">
+          <label>引力</label>
+          <input type="range" id="gravitySlider" min="0.1" max="2" step="0.05" value="0.8">
+          <span class="control-value" id="gravityVal">0.80</span>
         </div>
-      </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="main-content">
-
-      <!-- Chat Tab -->
-      <div class="tab-content active" id="tab-chat">
-        <div class="chat-messages" id="chatMessages">
-          <div class="message atlas">
-            <div class="avatar">🧠</div>
-            <div class="bubble">
-              <p>Hello! I'm Atlas. How can I help you today?</p>
-              <p class="hint">Try: "what is the stock market doing?" or "write a screenplay"</p>
-              <span class="time">just now</span>
-            </div>
-          </div>
+        <div class="graph-control-row">
+          <label>斥力</label>
+          <input type="range" id="repulsionSlider" min="100" max="2000" step="50" value="800">
+          <span class="control-value" id="repulsionVal">800</span>
         </div>
-
-        <div class="chat-input-bar">
-          <textarea id="chatInput" rows="1" placeholder="Type your message..." 
-                    onkeydown="handleKeyDown(event)" autofocus></textarea>
-          <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
-            ➤
-          </button>
+        <div class="graph-control-row">
+          <label>节点</label>
+          <input type="range" id="sizeSlider" min="0.3" max="2" step="0.1" value="1.0">
+          <span class="control-value" id="sizeVal">1.0×</span>
+        </div>
+        <div class="graph-action-row">
+          <button class="graph-action-btn" id="resetGraphBtn">重置布局</button>
+          <button class="graph-action-btn" id="addNodeBtn">+ 随机节点</button>
         </div>
       </div>
+    </div>
 
-      <!-- Agents Tab -->
-      <div class="tab-content" id="tab-agents">
-        <div class="tab-header">
-          <h2>🤖 Registered Agents</h2>
-          <p class="subtitle">14 specialized agents powering Atlas</p>
-        </div>
-        <div class="agents-grid" id="agentsGrid">
-          <div class="loading">Loading agents...</div>
+    <div class="panel-section">
+      <div class="section-label">主题</div>
+      <div class="theme-strip" id="themeStrip">
+        <span class="theme-dot active" data-theme="midnight" style="background:#4a7ab5" title="Midnight"></span>
+        <span class="theme-dot" data-theme="phosphor" style="background:#7ccf7c" title="Phosphor"></span>
+        <span class="theme-dot" data-theme="violet" style="background:#9b7df0" title="Violet"></span>
+        <span class="theme-dot" data-theme="ember" style="background:#e87a5a" title="Ember"></span>
+        <span class="theme-dot" data-theme="frost" style="background:#60c8e8" title="Frost"></span>
+        <span class="theme-dot" data-theme="rose" style="background:#dc78b0" title="Rose"></span>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      <button class="panel-btn" id="settingsBtn" title="设置">⚙</button>
+      <button class="panel-btn" id="voiceBtn" title="语音">🎤</button>
+      <button class="panel-btn" id="toggleRightBtn" title="切换右侧面板">☰</button>
+      <span class="version-tag" id="versionTag">Atlas v0.6.0</span>
+    </div>
+  </aside>
+
+  <!-- ═══ Secondary Panel (Right) ═══ -->
+  <aside class="panel secondary-panel" id="secondaryPanel">
+    <div class="panel-section">
+      <div class="section-label">状态</div>
+      <div class="metric-line"><span class="metric-label">节点</span><span class="metric-value highlight" id="nodeCount">0</span></div>
+      <div class="metric-line"><span class="metric-label">连线</span><span class="metric-value highlight" id="linkCount">0</span></div>
+      <div class="metric-line"><span class="metric-label">tok/s</span><span class="metric-value" id="tokRate">—</span></div>
+      <div class="metric-line"><span class="metric-label">运行</span><span class="metric-value" id="uptimeDisplay">0s</span></div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-label">系统负载</div>
+      <div class="metric-line"><span class="metric-label">CPU</span><span class="metric-value" id="cpuVal">—</span></div>
+      <div class="metric-bar"><div class="metric-fill" id="cpuBar" style="width:0%"></div></div>
+      <div class="metric-line" style="margin-top:4px"><span class="metric-label">MEM</span><span class="metric-value" id="memVal">—</span></div>
+      <div class="metric-bar"><div class="metric-fill" id="memBar" style="width:0%"></div></div>
+      <div class="metric-line" style="margin-top:4px"><span class="metric-label">LLM</span><span class="metric-value" id="llmVal">—</span></div>
+      <div class="metric-bar"><div class="metric-fill" id="llmBar" style="width:0%"></div></div>
+    </div>
+
+    <div class="panel-section" style="flex:1; overflow:hidden;">
+      <div class="section-label">活动流</div>
+      <div style="overflow-y:auto; max-height:160px;" id="streamContainer">
+        <div class="agent-stream-item">
+          <span class="agent-stream-dot"></span>
+          等待活动信号…
+          <span class="stream-timestamp">--:--</span>
         </div>
       </div>
+    </div>
+  </aside>
 
-      <!-- Routes Tab -->
-      <div class="tab-content" id="tab-routes">
-        <div class="tab-header">
-          <h2>🗺️ Route Table</h2>
-          <p class="subtitle">Intent routing patterns: domain → agent mapping</p>
-        </div>
-        <div class="routes-container" id="routesContainer">
-          <div class="loading">Loading routes...</div>
-        </div>
-      </div>
-
-    </main>
+  <!-- ═══ Console Bar ═══ -->
+  <div class="console-bar" id="consoleBar">
+    <div class="console-row">
+      <span class="console-prompt">▸</span>
+      <input class="console-input" id="consoleInput" type="text" placeholder="向 Atlas 发送消息…" autocomplete="off" spellcheck="false">
+      <button class="console-send" id="consoleSend" title="发送">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+    <div class="console-extras">
+      <span>Enter 发送 · ⌘K 聚焦</span>
+      <span class="console-stream-status">🟢 就绪</span>
+    </div>
   </div>
 
+  <!-- ═══ Settings Modal ═══ -->
+  <div class="settings-overlay" id="settingsOverlay" hidden>
+    <div class="settings-modal" role="dialog">
+      <div class="settings-header">
+        <span class="settings-title">设置</span>
+        <button class="settings-close" id="settingsClose">✕</button>
+      </div>
+      <div class="settings-body">
+        <nav class="settings-nav">
+          <button class="settings-nav-btn active" data-tab="appearance">外观</button>
+          <button class="settings-nav-btn" data-tab="llm">LLM 模型</button>
+          <button class="settings-nav-btn" data-tab="voice">语音</button>
+          <button class="settings-nav-btn" data-tab="search">搜索</button>
+          <button class="settings-nav-btn" data-tab="sandbox">沙箱</button>
+          <button class="settings-nav-btn" data-tab="system">系统</button>
+        </nav>
+        <div class="settings-content">
+
+          <!-- Appearance -->
+          <div class="settings-pane active" data-tab="appearance">
+            <div class="settings-group">
+              <div class="settings-group-title">主题</div>
+              <div class="theme-strip" id="settingsThemeStrip">
+                <span class="theme-dot active" data-theme="midnight" style="background:#4a7ab5"></span>
+                <span class="theme-dot" data-theme="phosphor" style="background:#7ccf7c"></span>
+                <span class="theme-dot" data-theme="violet" style="background:#9b7df0"></span>
+                <span class="theme-dot" data-theme="ember" style="background:#e87a5a"></span>
+                <span class="theme-dot" data-theme="frost" style="background:#60c8e8"></span>
+                <span class="theme-dot" data-theme="rose" style="background:#dc78b0"></span>
+              </div>
+            </div>
+            <div class="settings-group">
+              <div class="settings-group-title">界面缩放</div>
+              <div class="settings-row">
+                <span class="settings-label">缩放</span>
+                <div class="settings-slider-row">
+                  <input type="range" id="zoomSlider" min="0.8" max="1.6" step="0.05" value="1.0">
+                  <span class="settings-val" id="zoomValue">100%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- LLM -->
+          <div class="settings-pane" data-tab="llm">
+            <div class="settings-group">
+              <div class="settings-group-title">模型配置</div>
+              <div class="settings-row">
+                <span class="settings-label">提供商</span>
+                <select class="settings-select" id="providerSelect">
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </div>
+              <div class="settings-row" id="customUrlRow" hidden>
+                <span class="settings-label">Base URL</span>
+                <input class="settings-input" id="customUrl" type="text" placeholder="http://localhost:8642/v1">
+              </div>
+              <div class="settings-row">
+                <span class="settings-label">温度</span>
+                <div class="settings-slider-row">
+                  <input type="range" id="tempSlider" min="0" max="1.5" step="0.05" value="0.5">
+                  <span class="settings-val" id="tempValue">0.50</span>
+                </div>
+              </div>
+              <div class="settings-row">
+                <span class="settings-label">当前</span>
+                <span class="settings-hint" id="currentModel">DeepSeek · 0.50</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Voice -->
+          <div class="settings-pane" data-tab="voice">
+            <div class="settings-group">
+              <div class="settings-group-title">语音输入</div>
+              <div class="settings-toggle-row">
+                <span class="toggle-switch on" id="voiceInputToggle"><span class="toggle-knob"></span></span>
+                <span class="toggle-label">语音输入 (Web Speech)</span>
+              </div>
+              <div class="settings-toggle-row">
+                <span class="toggle-switch on" id="ttsToggle"><span class="toggle-knob"></span></span>
+                <span class="toggle-label">语音输出 (TTS)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search -->
+          <div class="settings-pane" data-tab="search">
+            <div class="settings-group">
+              <div class="settings-group-title">搜索引擎</div>
+              <p class="settings-hint">Serper / SearXNG / Bing 兜底搜索。无需配置即可使用。</p>
+              <div class="settings-row">
+                <span class="settings-label">Serper</span>
+                <input class="settings-input" type="text" placeholder="API Key">
+              </div>
+              <div class="settings-row">
+                <span class="settings-label">Jina</span>
+                <input class="settings-input" type="text" placeholder="API Key">
+              </div>
+            </div>
+          </div>
+
+          <!-- Sandbox -->
+          <div class="settings-pane" data-tab="sandbox">
+            <div class="settings-group">
+              <div class="settings-group-title">安全</div>
+              <div class="settings-toggle-row">
+                <span class="toggle-switch on" id="fileSandboxToggle"><span class="toggle-knob"></span></span>
+                <span class="toggle-label">文件沙箱</span>
+              </div>
+              <div class="settings-toggle-row">
+                <span class="toggle-switch on" id="execSandboxToggle"><span class="toggle-knob"></span></span>
+                <span class="toggle-label">命令沙箱</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- System -->
+          <div class="settings-pane" data-tab="system">
+            <div class="settings-group">
+              <div class="settings-group-title">系统信息</div>
+              <div class="settings-row"><span class="settings-label">版本</span><span class="settings-hint">Atlas v0.6.0</span></div>
+              <div class="settings-row"><span class="settings-label">引擎</span><span class="settings-hint">Memory Graph Interface</span></div>
+              <div class="settings-row"><span class="settings-label">运行时</span><span class="settings-hint" id="sysUptime">0s</span></div>
+              <div class="settings-row"><span class="settings-label">API</span><span class="settings-hint">Hermes Gateway</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="api-client.js"></script>
+  <script src="themes.js"></script>
+  <script src="graph.js"></script>
+  <script src="chat.js"></script>
+  <script src="thought-stream.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
