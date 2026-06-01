@@ -123,12 +123,15 @@ const AtlasChat = (() => {
       el.addEventListener('click', (e) => {
         e.preventDefault();
         const person = e.target.dataset.person;
-        if (AtlasProfile) {
+        // 优先使用增强版人物卡片 (BaiLongmaProfile)
+        if (typeof BaiLongmaProfile !== 'undefined' && BaiLongmaProfile.show) {
+          BaiLongmaProfile.show(person);
+        } else if (AtlasProfile) {
           AtlasProfile.show(person);
-          // 切换到资料标签
-          const profileTab = document.querySelector('.panel-tab[data-tab="profile"]');
-          if (profileTab) profileTab.click();
         }
+        // 切换到资料标签
+        const profileTab = document.querySelector('.panel-tab[data-tab="profile"]');
+        if (profileTab) profileTab.click();
       });
     });
     content.appendChild(textEl);

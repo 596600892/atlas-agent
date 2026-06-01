@@ -86,6 +86,11 @@ const $$ = (s) => document.querySelectorAll(s);
   // ── 资料面板 ──
   AtlasProfile.init();
 
+  // ── BaiLongma 增强人物卡片 + 文档面板 ──
+  if (typeof BaiLongmaProfile !== 'undefined') {
+    BaiLongmaProfile.init();
+  }
+
   // ── 右侧面板标签切换 ──
   document.querySelectorAll('.panel-tab').forEach(tab => {
     tab.addEventListener('click', () => {

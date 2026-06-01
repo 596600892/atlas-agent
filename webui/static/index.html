@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Atlas — Memory Graph</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/static/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
@@ -142,6 +142,39 @@
       <span>Enter 发送 · ⌘K 聚焦</span>
       <span class="console-stream-status">🟢 就绪</span>
       <button class="hotspot-toggle" id="hotspotToggle" title="热点地球">🌍</button>
+    </div>
+  </div>
+
+  <!-- ═══ 文档面板 (Doc Panel, 移植自 BaiLongma) ═══ -->
+  <div class="doc-panel" id="doc-panel">
+    <div class="dp-header">
+      <div class="dp-header-left">
+        <span class="dp-icon" id="dp-icon">📄</span>
+        <div class="dp-titles">
+          <div class="dp-title" id="dp-title">文档</div>
+          <div class="dp-subtitle" id="dp-subtitle">资料面板</div>
+        </div>
+      </div>
+      <div class="dp-header-right">
+        <div class="dp-tabs" id="dp-tabs">
+          <button class="dp-tab" data-topic="voice_config" type="button">语音配置</button>
+          <button class="dp-tab" data-topic="voice_asr" type="button">ASR</button>
+          <button class="dp-tab" data-topic="voice_tts" type="button">TTS</button>
+        </div>
+        <button class="dp-close-btn" id="dp-close-btn" type="button">✕</button>
+      </div>
+    </div>
+    <div class="dp-summary" id="dp-summary">加载中...</div>
+    <div class="dp-body">
+      <nav class="dp-nav" id="dp-nav"></nav>
+      <div class="dp-content" id="dp-content">
+        <div class="dp-loading">加载中...</div>
+      </div>
+    </div>
+    <div class="dp-providers" id="dp-providers"></div>
+    <div class="dp-footer">
+      <span class="dp-footer-note">Hermes API · 文档面板</span>
+      <span class="dp-footer-ttl" id="dp-footer-ttl">上下文有效期 30 分钟</span>
     </div>
   </div>
 
@@ -292,15 +325,22 @@
     </div>
   </div>
 
-  <script src="api-client.js"></script>
-  <script src="themes.js"></script>
-  <script src="graph.js"></script>
-  <script src="chat.js"></script>
-  <script src="thought-stream.js"></script>
-  <script src="voice-panel.js"></script>
-  <script src="profile-panel.js"></script>
+  <script src="/static/api-client.js"></script>
+  <script src="/static/themes.js"></script>
+  <script src="/static/graph.js"></script>
+  <script src="/static/chat.js"></script>
+  <script src="/static/thought-stream.js"></script>
+  <!-- BaiLongma voice panel (声波点云球) - _bl suffix -->
+  <script src="/static/bailongma-voice.js"></script>
+  <!-- BaiLongma 3D hotspot earth - _bl suffix -->
+  <script src="/static/bailongma-hotspot.js"></script>
+  <script src="/static/voice-panel.js"></script>
+  <script src="/static/profile-panel.js"></script>
+  <script src="/static/bailongma-profile.js"></script>
+  <script src="/static/bailongma-sse.js"></script>
+  <script src="/static/bailongma-chat.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="hotspot-earth.js"></script>
-  <script src="app.js"></script>
+  <script src="/static/hotspot-earth.js"></script>
+  <script src="/static/app.js"></script>
 </body>
 </html>
