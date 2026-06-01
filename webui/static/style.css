@@ -842,3 +842,57 @@ html, body {
   background: rgba(100, 180, 240, 0.2);
   color: var(--ink);
 }
+
+/* ── Voice Panel (Fibonacci 点云球) ──────── */
+
+.voice-panel {
+  position: fixed;
+  bottom: 64px;
+  right: 20px;
+  width: 180px;
+  height: 180px;
+  z-index: 50;
+  pointer-events: none;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.voice-panel.idle {
+  opacity: 0.3;
+  transform: scale(0.7);
+}
+
+.voice-panel.listening,
+.voice-panel.thinking,
+.voice-panel.speaking {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.voice-panel.error {
+  opacity: 0.8;
+  transform: scale(0.9) rotate(5deg);
+}
+
+.voice-panel.interrupted {
+  opacity: 0.6;
+  transform: scale(0.85);
+}
+
+.voice-canvas {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.voice-label {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-family: 'Inter', sans-serif;
+  color: var(--dim);
+  white-space: nowrap;
+  text-align: center;
+  letter-spacing: 0.5px;
+}

@@ -69,6 +69,10 @@ const AtlasChat = (() => {
         setStreamStatus('🟢 就绪');
         if (fullResponse) {
           addBubble(fullResponse, 'assistant');
+          // TTS 朗读
+          if (state.tts && AtlasVoicePanel) {
+            AtlasVoicePanel.speak(fullResponse);
+          }
         }
       },
       onError(err) {
@@ -149,18 +153,26 @@ const AtlasChat = (() => {
       const transcript = e.results[0][0].transcript;
       send(transcript);
       if (voiceBtn) voiceBtn.textContent = '🎤';
+      state.listening = false;
+      if (AtlasVoicePanel) AtlasVoicePanel.setMode('idle');
     };
     state.recognition.onend = () => {
       if (voiceBtn) voiceBtn.textContent = '🎤';
       state.listening = false;
+      if (AtlasVoicePanel) AtlasVoicePanel.setMode('idle');
     };
     if (voiceBtn) {
       voiceBtn.addEventListener('click', () => {
         if (!state.voiceInput) return;
-        if (state.listening) { state.recognition.stop(); return; }
+        if (state.listening) {
+          state.recognition.stop();
+          if (AtlasVoicePanel) AtlasVoicePanel.setMode('idle');
+          return;
+        }
         state.recognition.start();
         voiceBtn.textContent = '🔴';
         state.listening = true;
+        if (AtlasVoicePanel) AtlasVoicePanel.setMode('listening');
       });
     }
   }

@@ -13,6 +13,12 @@
   <!-- ── Force-Directed Memory Graph ── -->
   <canvas id="graphCanvas"></canvas>
 
+  <!-- ── Voice Panel (声波点云球) ── -->
+  <div class="voice-panel idle" id="voicePanel">
+    <canvas class="voice-canvas"></canvas>
+    <div class="voice-label" id="voiceLabel">待机中</div>
+  </div>
+
   <!-- ── Chat Bubbles Layer ── -->
   <div class="chat-layer" id="chatLayer"></div>
 
@@ -266,6 +272,7 @@
   <script src="graph.js"></script>
   <script src="chat.js"></script>
   <script src="thought-stream.js"></script>
+  <script src="voice-panel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

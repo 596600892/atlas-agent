@@ -80,6 +80,9 @@ const $$ = (s) => document.querySelectorAll(s);
   });
   AtlasChat.initVoice(el.voiceBtn);
 
+  // ── 语音面板 ──
+  AtlasVoicePanel.init('voicePanel');
+
   // ── 主题选择器 ──
   $$('.theme-dot').forEach(dot => {
     dot.addEventListener('click', () => {
