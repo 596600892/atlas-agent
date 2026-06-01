@@ -129,6 +129,19 @@
     <div class="console-extras">
       <span>Enter 发送 · ⌘K 聚焦</span>
       <span class="console-stream-status">🟢 就绪</span>
+      <button class="hotspot-toggle" id="hotspotToggle" title="热点地球">🌍</button>
+    </div>
+  </div>
+
+  <!-- ═══ Hotspot Earth Panel ═══ -->
+  <div class="hotspot-panel" id="hotspotPanel" hidden>
+    <div class="hotspot-earth-container" id="hotspotEarthContainer">
+      <div class="hotspot-earth-scene"></div>
+      <div class="hotspot-overlay">
+        <div class="hotspot-ticker" id="hotspotTicker">
+          <span>🌐 加载中…</span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -273,6 +286,8 @@
   <script src="chat.js"></script>
   <script src="thought-stream.js"></script>
   <script src="voice-panel.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="hotspot-earth.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

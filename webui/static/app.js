@@ -200,6 +200,20 @@ const $$ = (s) => document.querySelectorAll(s);
     AtlasStream.add(`${graph.nodes.length} 节点 · ${graph.edges.length} 连线`);
   }, 500);
 
+  // ── 热点地球 ──
+  const hotspotToggle = $('#hotspotToggle');
+  if (hotspotToggle) {
+    hotspotToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      AtlasHotspot.toggle();
+    });
+  }
+
+  // ── 窗口 Resize (3D 地球适配) ──
+  window.addEventListener('resize', () => {
+    AtlasHotspot.resize();
+  });
+
   el.consoleInput.focus();
   console.log(`Atlas WebUI · ${graph.nodes.length}n ${graph.edges.length}e · ${savedTheme} theme`);
 })();
