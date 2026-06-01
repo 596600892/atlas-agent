@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="atlas-agent",
-    version="0.4.0",
+    version="0.5.0",
     description="Atlas — The universal AI agent. Voice-first, self-evolving, permanently-memorious.",
     long_description=(Path(__file__).parent / "README.md").read_text(),
     long_description_content_type="text/markdown",

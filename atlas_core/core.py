@@ -467,52 +467,52 @@ class Atlas:
 
         # 按能力分类构建响应 / Build response by capability
         responses = {
-            AgentCapability.FINANCE: (
+            AgentCapability.FINANCE_PREDICTION: (
                 f"I detected a finance-related query. The {agent_name} can help with "
                 f"stock prediction, factor analysis, and portfolio optimization.\n\n"
                 f"我识别到金融相关查询。{agent_name} 可以帮助进行股票预测、因子分析和投资组合优化。"
             ),
-            AgentCapability.SCREENPLAY: (
+            AgentCapability.SCREENPLAY_WRITING: (
                 f"I detected a screenplay-related query. The {agent_name} can help with "
                 f"script writing, character development, and plot structure.\n\n"
                 f"我识别到剧本相关查询。{agent_name} 可以帮助进行剧本写作、角色和情节开发。"
             ),
-            AgentCapability.IMAGE_GEN: (
+            AgentCapability.IMAGE_GENERATION: (
                 f"I detected an image generation request. The {agent_name} can help with "
                 f"text-to-image generation, style transfer, and image editing.\n\n"
                 f"我识别到图像生成请求。{agent_name} 可以生成图像、风格迁移和图像编辑。"
             ),
-            AgentCapability.VIDEO_PROD: (
+            AgentCapability.VIDEO_PRODUCTION: (
                 f"I detected a video production request. The {agent_name} can help with "
                 f"video generation, editing, subtitles, and effects.\n\n"
                 f"我识别到视频制作请求。{agent_name} 可以生成视频、编辑、添加字幕和特效。"
             ),
-            AgentCapability.MARKET_MONITOR: (
+            AgentCapability.MARKET_MONITORING: (
                 f"I detected a market monitoring request. The {agent_name} can help with "
                 f"real-time market data, trend analysis, and risk alerts.\n\n"
                 f"我识别到市场监控请求。{agent_name} 可以提供实时行情、趋势分析和风险预警。"
             ),
-            AgentCapability.CROSS_DOMAIN: (
+            AgentCapability.CROSS_DOMAIN_LEARNING: (
                 f"I detected a learning-related query. The {agent_name} can help with "
                 f"cross-domain knowledge transfer and research.\n\n"
                 f"我识别到学习相关查询。{agent_name} 可以帮助跨领域知识迁移和研究。"
             ),
-            AgentCapability.ECOMMERCE: (
+            AgentCapability.ECOMMERCE_OPS: (
                 f"I detected an e-commerce query. The {agent_name} can help with "
                 f"product management, order analysis, and inventory tracking.\n\n"
                 f"我识别到电商相关查询。{agent_name} 可以帮助商品管理、订单分析和库存跟踪。"
             ),
-            AgentCapability.SHORT_VIDEO: (
+            AgentCapability.SHORT_VIDEO_OPS: (
                 f"I detected a short video query. The {agent_name} can help with "
                 f"content strategy, engagement analysis, and trend optimization.\n\n"
                 f"我识别到短视频相关查询。{agent_name} 可以提供内容策略、互动分析和趋势优化。"
             ),
-            AgentCapability.SWARM: (
+            AgentCapability.SWARM_SIMULATION: (
                 f"I detected a swarm intelligence query. The {agent_name} can help with "
                 f"prediction aggregation, consensus mechanisms, and multi-agent simulation.\n\n"
                 f"我识别到群体智能查询。{agent_name} 可以处理预测聚合、共识机制和多智能体模拟。"
             ),
-            AgentCapability.SYSTEM_SENTINEL: (
+            AgentCapability.SYSTEM_MONITORING: (
                 f"I detected a system monitoring query. The {agent_name} can help with "
                 f"service health checks, resource monitoring, and anomaly detection.\n\n"
                 f"我识别到系统监控查询。{agent_name} 可以检查服务健康、监控资源和异常检测。"
@@ -522,12 +522,12 @@ class Atlas:
                 f"error diagnosis, root cause analysis, and recovery planning.\n\n"
                 f"我识别到故障分析查询。{agent_name} 可以诊断错误、分析根因和制定恢复计划。"
             ),
-            AgentCapability.TOKEN_BUDGET: (
+            AgentCapability.TOKEN_MANAGEMENT: (
                 f"I detected a token budget query. The {agent_name} can help with "
                 f"usage tracking, cost optimization, and quota management.\n\n"
                 f"我识别到Token预算查询。{agent_name} 可以跟踪用量、优化成本和配额管理。"
             ),
-            AgentCapability.CREATIVE_COORD: (
+            AgentCapability.CREATIVE_COORDINATION: (
                 f"I detected a creative coordination query. The {agent_name} can help with "
                 f"project pipeline management, multi-modal creation, and team collaboration.\n\n"
                 f"我识别到创意协调查询。{agent_name} 可以管理项目管线、多模态创作和团队协作。"

@@ -106,48 +106,48 @@ class TestProcess:
         result = self.atlas.process("stock price of AAPL")
         assert result is not None
         assert "intent" in result
-        assert result["intent"] == AgentCapability.FINANCE.value
+        assert result["intent"] == AgentCapability.FINANCE_PREDICTION.value
 
     def test_screenplay_query_routing(self):
         """剧本查询路由 / Screenplay query routing"""
         result = self.atlas.process("write a screenplay for a horror movie")
-        assert result["intent"] == AgentCapability.SCREENPLAY.value
+        assert result["intent"] == AgentCapability.SCREENPLAY_WRITING.value
         assert result["confidence"] > 0
 
     def test_image_gen_routing(self):
         """图像生成路由 / Image generation routing"""
         result = self.atlas.process("generate an image of a mountain")
-        assert result["intent"] == AgentCapability.IMAGE_GEN.value
+        assert result["intent"] == AgentCapability.IMAGE_GENERATION.value
         assert result["confidence"] > 0
 
     def test_chinese_image_routing(self):
         """中文图像查询路由 / Chinese image query routing"""
         result = self.atlas.process("帮我画一张风景图")
-        assert result["intent"] == AgentCapability.IMAGE_GEN.value
+        assert result["intent"] == AgentCapability.IMAGE_GENERATION.value
         assert result["confidence"] > 0, "Chinese IMAGE_GEN should match keywords: 画, 图, 风景"
 
     def test_video_routing(self):
         """视频查询路由 / Video query routing"""
         result = self.atlas.process("make a video about AI")
-        assert result["intent"] == AgentCapability.VIDEO_PROD.value
+        assert result["intent"] == AgentCapability.VIDEO_PRODUCTION.value
         assert result["confidence"] > 0
 
     def test_market_monitor_routing(self):
         """市场监控路由 / Market monitor routing"""
         result = self.atlas.process("monitor the market trends today")
-        assert result["intent"] == AgentCapability.MARKET_MONITOR.value
+        assert result["intent"] == AgentCapability.MARKET_MONITORING.value
         assert result["confidence"] > 0
 
     def test_ecommerce_routing(self):
         """电商查询路由 / E-commerce routing"""
         result = self.atlas.process("check my product inventory")
-        assert result["intent"] == AgentCapability.ECOMMERCE.value
+        assert result["intent"] == AgentCapability.ECOMMERCE_OPS.value
         assert result["confidence"] > 0
 
     def test_system_sentinel_routing(self):
         """系统监控路由 / System sentinel routing"""
         result = self.atlas.process("check system health status")
-        assert result["intent"] == AgentCapability.SYSTEM_SENTINEL.value
+        assert result["intent"] == AgentCapability.SYSTEM_MONITORING.value
         assert result["confidence"] > 0
 
     def test_unknown_query(self):
@@ -183,7 +183,7 @@ class TestProcess:
     def test_chinese_finance_routing(self):
         """中文金融查询 / Chinese finance query"""
         result = self.atlas.process("分析股票走势")
-        assert result["intent"] == AgentCapability.FINANCE.value
+        assert result["intent"] == AgentCapability.FINANCE_PREDICTION.value
 
 
 # ══════════════════════════════════════════════════════════════
@@ -312,21 +312,21 @@ class TestEdgeCases:
         long_text = "stock " * 100
         result = atlas.process(long_text)
         assert result is not None
-        assert result["intent"] == AgentCapability.FINANCE.value
+        assert result["intent"] == AgentCapability.FINANCE_PREDICTION.value
         assert result["confidence"] > 0
 
     def test_mixed_chinese_english(self):
         """中英混合 / Mixed Chinese-English"""
         atlas = Atlas(voice_enabled=False, memory_enabled=False)
         result = atlas.process("分析AAPL stock price趋势")
-        assert result["intent"] == AgentCapability.FINANCE.value
+        assert result["intent"] == AgentCapability.FINANCE_PREDICTION.value
 
     def test_multiple_intents_first_wins(self):
         """多意图取最高 / Multiple intents, highest wins"""
         atlas = Atlas(voice_enabled=False, memory_enabled=False)
         result = atlas.process("stock price image generation")
         # Both finance and image_gen match, the highest confidence wins
-        assert result["intent"] in (AgentCapability.FINANCE.value, AgentCapability.IMAGE_GEN.value)
+        assert result["intent"] in (AgentCapability.FINANCE_PREDICTION.value, AgentCapability.IMAGE_GENERATION.value)
 
 
 if __name__ == "__main__":

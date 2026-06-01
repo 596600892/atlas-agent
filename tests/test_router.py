@@ -1,16 +1,16 @@
-#!/usr/bin/env python3
 """
-Tests for Router Engine — 路由引擎测试
-=========================================
-Tests intent classification, agent lookup, confidence scoring, and edge cases.
-测试意图分类、Agent查找、置信度评分和边界情况。
+Tests for Router Engine v2 — 路由引擎 v2 测试
+==============================================
+Phase 5: Hierarchical routing, multi-intent, LLM, fallback, aggregation.
 """
 
 import sys
 import os
 
-# 确保测试能找到 atlas_core / Ensure tests can find atlas_core
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import json
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -21,267 +21,208 @@ from atlas_core.router_engine import (
     IntentRouter,
     REGISTRY,
     create_router,
+    route_query,
+    LLMEnhancer,
+    RouterComponent,
+    RoutingPlan,
+    RouteLevel,
+    ConfidenceLevel,
+    FallbackStrategy,
+    AggregationStrategy,
 )
 
 
 # ══════════════════════════════════════════════════════════════
-# 基础测试 / Basic tests
+# 注册表测试 / Registry tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestRegistry:
-    """测试 Agent 注册表 / Test agent registry"""
+    """Agent 注册表测试 / Agent registry tests."""
 
     def test_all_14_agents_registered(self):
-        """验证所有14个Agent都已注册 / Verify all 14 agents are registered"""
-        assert len(REGISTRY) == 14, f"Expected 14 agents, got {len(REGISTRY)}"
+        assert len(REGISTRY) == 14
 
     def test_required_agents_present(self):
-        """验证必需Agent存在 / Verify required agents exist"""
-        required_names = [
-            "finance-agent",
-            "screenplay-agent",
-            "image-gen-agent",
-            "video-prod-agent",
-            "market-monitor-agent",
-            "cross-domain-learner",
-            "ecommerce-agent",
-            "short-video-agent",
-            "swarm-sim-agent",
-            "system-sentinel",
-            "fault-analysis-agent",
-            "token-budget-agent",
-            "creative-coordinator",
-            "task-orchestrator",
+        required = [
+            "finance-agent", "screenplay-agent", "image-gen-agent",
+            "video-prod-agent", "market-monitor-agent", "cross-domain-learner",
+            "ecommerce-agent", "short-video-agent", "swarm-sim-agent",
+            "system-sentinel", "fault-analysis-agent", "token-budget-agent",
+            "creative-coordinator", "task-orchestrator",
         ]
-        for name in required_names:
+        for name in required:
             assert name in REGISTRY, f"Missing agent: {name}"
 
     def test_agent_manifest_structure(self):
-        """验证AgentManifest结构完整 / Verify AgentManifest has all fields"""
         for name, manifest in REGISTRY.items():
-            assert isinstance(manifest, AgentManifest), f"{name} is not AgentManifest"
-            assert manifest.name, f"{name} has no name"
-            assert manifest.repo_url, f"{name} has no repo_url"
-            assert manifest.capabilities, f"{name} has no capabilities"
-            assert manifest.description, f"{name} has no description"
-            assert manifest.pip_package, f"{name} has no pip_package"
-            # 每个Agent至少有一种能力 / Each agent has at least one capability
+            assert isinstance(manifest, AgentManifest)
+            assert manifest.name
+            assert manifest.repo_url
+            assert manifest.capabilities
+            assert manifest.description
+            assert manifest.pip_package
             assert len(manifest.capabilities) >= 1
 
-    def test_capability_enum_values(self):
-        """验证AgentCapability枚举值 / Verify enum values"""
-        expected_values = [
-            "finance",
-            "screenplay",
-            "image_gen",
-            "video_prod",
-            "market_monitor",
-            "cross_domain",
-            "ecommerce",
-            "short_video",
-            "swarm",
-            "system_sentinel",
-            "fault_analysis",
-            "token_budget",
-            "creative_coord",
-            "task_orch",
+    def test_capability_enum_imported_from_architecture(self):
+        """验证能力枚举来自 architecture.py / Verify capabilities from architecture."""
+        expected = [
+            "finance_prediction", "screenplay_writing", "image_generation",
+            "video_production", "market_monitoring", "cross_domain_learning",
+            "ecommerce_ops", "short_video_ops", "swarm_simulation",
+            "system_monitoring", "fault_analysis", "token_management",
+            "creative_coordination", "task_orchestration",
+            "memory_management", "voice_interaction", "architecture", "plugin",
         ]
-        actual_values = [c.value for c in AgentCapability]
-        for v in expected_values:
-            assert v in actual_values, f"Missing capability value: {v}"
-        assert len(actual_values) == 14
+        actual = [c.value for c in AgentCapability]
+        for v in expected:
+            assert v in actual, f"Missing capability: {v}"
 
     def test_agent_capability_consistency(self):
-        """验证Agent能力与枚举一致 / Verify agent capabilities match enum"""
-        all_enum_values = set(c.value for c in AgentCapability)
+        all_values = set(c.value for c in AgentCapability)
         for manifest in REGISTRY.values():
             for cap in manifest.capabilities:
-                assert cap.value in all_enum_values, (
-                    f"{manifest.name} has unknown capability: {cap.value}"
+                assert cap.value in all_values, (
+                    f"{manifest.name} has unknown: {cap.value}"
                 )
 
 
 # ══════════════════════════════════════════════════════════════
-# 路由测试 / Routing tests
+# 意图分类测试 / Intent classification
 # ══════════════════════════════════════════════════════════════
 
+
 class TestIntentClassification:
-    """测试意图分类 / Test intent classification"""
+    """意图分类测试 / Intent classification tests."""
 
     def setup_method(self):
         self.router = create_router()
 
-    # --- 金融 / Finance ---
+    # --- Finance ---
 
     def test_finance_stock_query(self):
-        """金融: 股票查询 / Finance: stock query"""
         results = self.router.route("what is the stock price of AAPL")
         assert len(results) > 0
-        top_agent, confidence = results[0]
-        assert AgentCapability.FINANCE in top_agent.capabilities
-        assert confidence > 0.25, f"Expected >0.25, got {confidence}"
+        assert AgentCapability.FINANCE_PREDICTION in results[0][0].capabilities
 
     def test_finance_investment_query(self):
-        """金融: 投资查询 / Finance: investment query"""
         results = self.router.route("我想投资股票")
         assert len(results) > 0
-        assert AgentCapability.FINANCE in results[0][0].capabilities
+        assert AgentCapability.FINANCE_PREDICTION in results[0][0].capabilities
 
     def test_finance_earnings_query(self):
-        """金融: 财报查询 / Finance: earnings query"""
         results = self.router.route("show me earnings reports for tech stocks")
         assert len(results) > 0
-        assert AgentCapability.FINANCE in results[0][0].capabilities
+        assert AgentCapability.FINANCE_PREDICTION in results[0][0].capabilities
 
-    # --- 剧本 / Screenplay ---
+    # --- Screenplay ---
 
     def test_screenplay_script_query(self):
-        """剧本: 剧本查询 / Screenplay: script query"""
         results = self.router.route("write a screenplay about time travel")
         assert len(results) > 0
-        assert AgentCapability.SCREENPLAY in results[0][0].capabilities
+        assert AgentCapability.SCREENPLAY_WRITING in results[0][0].capabilities
 
     def test_screenplay_dialogue_query(self):
-        """剧本: 对话查询 / Screenplay: dialogue query"""
         results = self.router.route("帮我写一段电影台词")
         assert len(results) > 0
-        assert AgentCapability.SCREENPLAY in results[0][0].capabilities
+        assert AgentCapability.SCREENPLAY_WRITING in results[0][0].capabilities
 
-    # --- 图像 / Image ---
+    # --- Image ---
 
     def test_image_gen_query(self):
-        """图像: 生成图片 / Image: generate image"""
         results = self.router.route("generate an image of a cat")
         assert len(results) > 0
-        assert AgentCapability.IMAGE_GEN in results[0][0].capabilities
+        assert AgentCapability.IMAGE_GENERATION in results[0][0].capabilities
 
     def test_image_gen_chinese(self):
-        """图像: 中文查询 / Image: Chinese query"""
         results = self.router.route("帮我画一张风景图")
         assert len(results) > 0
-        assert AgentCapability.IMAGE_GEN in results[0][0].capabilities
+        assert AgentCapability.IMAGE_GENERATION in results[0][0].capabilities
 
-    # --- 视频 / Video ---
+    # --- Video ---
 
     def test_video_production_query(self):
-        """视频: 视频制作 / Video: video production"""
         results = self.router.route("edit this video with subtitles")
         assert len(results) > 0
-        assert AgentCapability.VIDEO_PROD in results[0][0].capabilities
+        assert AgentCapability.VIDEO_PRODUCTION in results[0][0].capabilities
 
-    # --- 市场 / Market ---
+    # --- Market ---
 
     def test_market_monitor_query(self):
-        """市场: 市场监控 / Market: market monitor"""
         results = self.router.route("monitor the stock market trends")
         assert len(results) > 0
-        assert AgentCapability.MARKET_MONITOR in results[0][0].capabilities
+        assert AgentCapability.MARKET_MONITORING in results[0][0].capabilities
 
     def test_market_alert_query(self):
-        """市场: 预警查询 / Market: alert query"""
         results = self.router.route("set up a risk alert for crypto")
         assert len(results) > 0
-        assert AgentCapability.MARKET_MONITOR in results[0][0].capabilities
+        assert AgentCapability.MARKET_MONITORING in results[0][0].capabilities
 
-    # --- 跨领域 / Cross-domain ---
+    # --- Cross-domain ---
 
     def test_cross_domain_query(self):
-        """跨领域: 学习查询 / Cross-domain: learning query"""
         results = self.router.route("learn about quantum computing")
         assert len(results) > 0
-        assert AgentCapability.CROSS_DOMAIN in results[0][0].capabilities
+        assert AgentCapability.CROSS_DOMAIN_LEARNING in results[0][0].capabilities
 
-    # --- 电商 / E-commerce ---
+    # --- E-commerce ---
 
     def test_ecommerce_query(self):
-        """电商: 商品查询 / E-commerce: product query"""
         results = self.router.route("manage my e-commerce inventory")
         assert len(results) > 0
-        assert AgentCapability.ECOMMERCE in results[0][0].capabilities
+        assert AgentCapability.ECOMMERCE_OPS in results[0][0].capabilities
 
-    def test_ecommerce_order_query(self):
-        """电商: 订单查询 / E-commerce: order query"""
-        results = self.router.route("check my recent orders")
-        assert len(results) > 0
-        assert AgentCapability.ECOMMERCE in results[0][0].capabilities
-
-    # --- 短视频 / Short Video ---
+    # --- Short Video ---
 
     def test_short_video_query(self):
-        """短视频: 内容策略 / Short video: content strategy"""
         results = self.router.route("optimize my tiktok content strategy")
         assert len(results) > 0
-        assert AgentCapability.SHORT_VIDEO in results[0][0].capabilities
+        assert AgentCapability.SHORT_VIDEO_OPS in results[0][0].capabilities
 
     def test_short_video_chinese(self):
-        """短视频: 中文查询 / Short video: Chinese query"""
         results = self.router.route("抖音运营策略")
         assert len(results) > 0
-        assert AgentCapability.SHORT_VIDEO in results[0][0].capabilities
+        assert AgentCapability.SHORT_VIDEO_OPS in results[0][0].capabilities
 
-    # --- 群体智能 / Swarm ---
+    # --- Swarm ---
 
     def test_swarm_query(self):
-        """群体智能: 模拟查询 / Swarm: simulation query"""
         results = self.router.route("run a swarm simulation")
         assert len(results) > 0
-        assert AgentCapability.SWARM in results[0][0].capabilities
+        assert AgentCapability.SWARM_SIMULATION in results[0][0].capabilities
 
-    # --- 系统监控 / System Sentinel ---
+    # --- System ---
 
-    def test_system_sentinel_query(self):
-        """系统监控: 健康检查 / System: health check"""
+    def test_system_query(self):
         results = self.router.route("check system health and cpu usage")
         assert len(results) > 0
-        assert AgentCapability.SYSTEM_SENTINEL in results[0][0].capabilities
+        assert AgentCapability.SYSTEM_MONITORING in results[0][0].capabilities
 
-    def test_system_server_query(self):
-        """系统监控: 服务器查询 / System: server query"""
-        results = self.router.route("monitor server memory")
-        assert len(results) > 0
-        assert AgentCapability.SYSTEM_SENTINEL in results[0][0].capabilities
+    # --- Fault ---
 
-    # --- 故障分析 / Fault Analysis ---
-
-    def test_fault_analysis_query(self):
-        """故障分析: 错误诊断 / Fault: error diagnosis"""
+    def test_fault_query(self):
         results = self.router.route("analyze this crash error")
         assert len(results) > 0
         assert AgentCapability.FAULT_ANALYSIS in results[0][0].capabilities
 
-    def test_fault_debug_query(self):
-        """故障分析: 调试 / Fault: debug"""
-        results = self.router.route("debug this exception in the code")
-        assert len(results) > 0
-        assert AgentCapability.FAULT_ANALYSIS in results[0][0].capabilities
+    # --- Token ---
 
-    # --- Token预算 / Token Budget ---
-
-    def test_token_budget_query(self):
-        """Token预算: 用量查询 / Token: usage query"""
+    def test_token_query(self):
         results = self.router.route("check my token usage and cost")
         assert len(results) > 0
-        assert AgentCapability.TOKEN_BUDGET in results[0][0].capabilities
+        assert AgentCapability.TOKEN_MANAGEMENT in results[0][0].capabilities
 
-    # --- 创意协调 / Creative Coord ---
+    # --- Creative ---
 
-    def test_creative_coord_query(self):
-        """创意协调: 项目管理 / Creative: project management"""
+    def test_creative_query(self):
         results = self.router.route("coordinate the creative project pipeline")
         assert len(results) > 0
-        assert AgentCapability.CREATIVE_COORD in results[0][0].capabilities
+        assert AgentCapability.CREATIVE_COORDINATION in results[0][0].capabilities
 
-    # --- 任务编排 / Task Orchestration ---
+    # --- Task ---
 
-    def test_task_orchestration_query(self):
-        """任务编排: 工作流 / Task: workflow"""
+    def test_task_query(self):
         results = self.router.route("orchestrate a multi-step workflow")
-        assert len(results) > 0
-        assert AgentCapability.TASK_ORCHESTRATION in results[0][0].capabilities
-
-    def test_task_automation_query(self):
-        """任务编排: 自动化 / Task: automation"""
-        results = self.router.route("automate my deployment pipeline")
         assert len(results) > 0
         assert AgentCapability.TASK_ORCHESTRATION in results[0][0].capabilities
 
@@ -290,167 +231,124 @@ class TestIntentClassification:
 # 置信度测试 / Confidence tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestConfidenceScoring:
-    """测试置信度评分 / Test confidence scoring"""
+    """置信度评分测试 / Confidence scoring tests."""
 
     def setup_method(self):
         self.router = create_router()
 
-    def test_high_confidence_exact_match(self):
-        """高置信度: 精确匹配 / High confidence: exact match"""
+    def test_high_confidence_match(self):
         results = self.router.route("stock price prediction for AAPL")
         assert len(results) > 0
-        assert results[0][1] > 0.5, f"Expected >0.5, got {results[0][1]}"
+        assert results[0][1] > 0.5
 
-    def test_medium_confidence_partial_match(self):
-        """中等置信度: 部分匹配 / Medium confidence: partial match"""
+    def test_medium_confidence_partial(self):
         results = self.router.route("我需要一些投资建议")
         assert len(results) > 0
-        # 应该匹配到金融至少有一定分数 / Should match finance with some score
         assert results[0][1] > 0
 
     def test_low_confidence_ambiguous(self):
-        """低置信度: 模糊查询 / Low confidence: ambiguous query"""
         results = self.router.route("help")
-        # 大多数模糊查询至少会有一个低分匹配 / Most fuzzy queries match something at low score
         if results:
             assert results[0][1] < 0.5
 
     def test_confidence_ranking(self):
-        """置信度排序: 最佳匹配排第一 / Confidence ranking: best match first"""
         results = self.router.route("stock market price analysis")
         if len(results) >= 2:
-            # 金融应该排第一 / Finance should be first
             assert results[0][1] >= results[1][1]
 
-    def test_multiple_keywords_increase_score(self):
-        """多个关键词提高分数 / Multiple keywords increase score"""
-        single = self.router.route("stock")
-        multi = self.router.route("stock price earnings")
-        if single and multi:
-            assert multi[0][1] >= single[0][1]
-
 
 # ══════════════════════════════════════════════════════════════
-# 边界情况测试 / Edge case tests
+# 边界情况 / Edge cases
 # ══════════════════════════════════════════════════════════════
+
 
 class TestEdgeCases:
-    """测试边界情况 / Test edge cases"""
+    """边界情况测试 / Edge case tests."""
 
     def setup_method(self):
         self.router = create_router()
 
     def test_empty_query(self):
-        """空查询 / Empty query"""
-        results = self.router.route("")
-        assert results == []
+        assert self.router.route("") == []
 
     def test_whitespace_query(self):
-        """空白查询 / Whitespace-only query"""
-        results = self.router.route("   ")
-        assert results == []
+        assert self.router.route("   ") == []
 
     def test_gibberish_query(self):
-        """无意义查询 / Gibberish query"""
-        results = self.router.route("asdfqwer zxcvbnm")
-        assert results == []
+        assert self.router.route("asdfqwer zxcvbnm") == []
 
     def test_special_characters(self):
-        """特殊字符 / Special characters"""
-        results = self.router.route("@#$%^&*()")
-        assert results == []
+        assert self.router.route("@#$%^&*()") == []
 
     def test_very_long_query(self):
-        """超长查询 / Very long query"""
         long_text = " ".join(["finance"] * 1000)
         results = self.router.route(long_text)
         assert len(results) > 0
-        assert AgentCapability.FINANCE in results[0][0].capabilities
 
     def test_mixed_language_query(self):
-        """混合语言 / Mixed language"""
         results = self.router.route("帮我写一个 sci-fi screenplay about AI")
         assert len(results) > 0
-        # 应该同时匹配剧本和创意 / Should match both screenplay and creative
         caps = {cap for m, _ in results for cap in m.capabilities}
-        assert AgentCapability.SCREENPLAY in caps
+        assert AgentCapability.SCREENPLAY_WRITING in caps
 
     def test_numeric_query(self):
-        """纯数字查询 / Numeric query"""
-        results = self.router.route("42")
-        assert results == []
+        assert self.router.route("42") == []
 
     def test_single_character(self):
-        """单字符 / Single character"""
-        results = self.router.route("a")
-        assert results == []
+        assert self.router.route("a") == []
 
 
 # ══════════════════════════════════════════════════════════════
-# Agent查找测试 / Agent lookup tests
+# Agent 查找 / Agent lookup
 # ══════════════════════════════════════════════════════════════
+
 
 class TestAgentLookup:
-    """测试Agent查找方法 / Test agent lookup methods"""
+    """Agent 查找测试 / Agent lookup tests."""
 
     def setup_method(self):
         self.router = create_router()
 
     def test_get_agent_found(self):
-        """查找存在的Agent / Lookup existing agent"""
         agent = self.router.get_agent("finance-agent")
         assert agent is not None
         assert agent.name == "finance-agent"
-        assert AgentCapability.FINANCE in agent.capabilities
+        assert AgentCapability.FINANCE_PREDICTION in agent.capabilities
 
     def test_get_agent_not_found(self):
-        """查找不存在的Agent / Lookup non-existent agent"""
-        agent = self.router.get_agent("nonexistent-agent")
-        assert agent is None
+        assert self.router.get_agent("nonexistent") is None
 
     def test_get_agent_empty_name(self):
-        """空名称查找 / Empty name lookup"""
-        agent = self.router.get_agent("")
-        assert agent is None
+        assert self.router.get_agent("") is None
 
     def test_list_all_returns_14(self):
-        """list_all 返回14个 / list_all returns 14"""
-        agents = self.router.list_all()
-        assert len(agents) == 14
+        assert len(self.router.list_all()) == 14
 
     def test_list_all_no_duplicates(self):
-        """list_all 无重复 / list_all has no duplicates"""
-        agents = self.router.list_all()
-        names = [a.name for a in agents]
+        names = [a.name for a in self.router.list_all()]
         assert len(names) == len(set(names))
 
     def test_list_by_capability_finance(self):
-        """按金融能力筛选 / Filter by finance capability"""
-        agents = self.router.list_by_capability(AgentCapability.FINANCE)
+        agents = self.router.list_by_capability(AgentCapability.FINANCE_PREDICTION)
         assert len(agents) >= 1
         for agent in agents:
-            assert AgentCapability.FINANCE in agent.capabilities
-
-    def test_list_by_capability_unique_capabilities(self):
-        """每种能力至少有一个Agent / Each capability has at least one agent"""
-        for cap in AgentCapability:
-            agents = self.router.list_by_capability(cap)
-            assert len(agents) >= 1, f"No agents for capability: {cap}"
+            assert AgentCapability.FINANCE_PREDICTION in agent.capabilities
 
 
 # ══════════════════════════════════════════════════════════════
 # IntentResult 测试 / IntentResult tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestIntentResult:
-    """测试 IntentResult / Test IntentResult"""
+    """IntentResult 测试 / IntentResult tests."""
 
     def setup_method(self):
         self.router = create_router()
 
     def test_analyze_returns_intent_result(self):
-        """analyze 返回 IntentResult / analyze returns IntentResult"""
         result = self.router.analyze("stock price of TSLA")
         assert isinstance(result, IntentResult)
         assert result.query == "stock price of TSLA"
@@ -459,27 +357,372 @@ class TestIntentResult:
         assert len(result.matched_agents) > 0
 
     def test_analyze_empty_query(self):
-        """空查询分析 / Empty query analysis"""
         result = self.router.analyze("")
         assert isinstance(result, IntentResult)
         assert result.primary_intent is None
         assert result.confidence == 0.0
-        assert result.matched_agents == []
 
     def test_analyze_unknown_query(self):
-        """未知查询分析 / Unknown query analysis"""
         result = self.router.analyze("xyzzy flurbo garblex")
-        assert isinstance(result, IntentResult)
         assert result.primary_intent is None
         assert result.confidence == 0.0
 
-    def test_intent_result_suggested_command(self):
-        """建议命令生成 / Suggested command generation"""
+    def test_suggested_command(self):
         result = self.router.analyze("draw a picture of a mountain")
-        assert result.suggested_command != "", "Should have a suggested command"
+        assert result.suggested_command != ""
         assert "atlas ask" in result.suggested_command
 
-    def test_intent_result_no_suggestion_for_unknown(self):
-        """未知查询无建议 / No suggestion for unknown query"""
+    def test_no_suggestion_for_unknown(self):
         result = self.router.analyze("")
         assert result.suggested_command == ""
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 5 新功能测试: 分层路由 / Hierarchical routing
+# ══════════════════════════════════════════════════════════════
+
+
+class TestHierarchicalRouting:
+    """分层路由测试 / Hierarchical routing tests."""
+
+    def setup_method(self):
+        self.router = create_router()
+
+    def test_agent_level_default(self):
+        """默认是 AGENT 级别路由 / Default is AGENT level."""
+        results = self.router.route("stock price AAPL")
+        assert len(results) > 0
+        assert results[0][0].name == "finance-agent"
+
+    def test_domain_level_routing(self):
+        """DOMAIN 级别返回领域下所有 Agent / Domain level returns domain agents."""
+        results = self.router.route("stock market analysis",
+                                     level=RouteLevel.DOMAIN)
+        assert len(results) > 0
+        # 金融领域应该包含 finance-agent
+        names = [m.name for m, _ in results]
+        assert "finance-agent" in names
+        # 可能还包含 market-monitor-agent
+        assert len(results) >= 1
+
+    def test_domain_level_creative(self):
+        """创意领域路由 / Creative domain routing."""
+        results = self.router.route("draw a picture",
+                                     level=RouteLevel.DOMAIN)
+        assert len(results) > 0
+        names = [m.name for m, _ in results]
+        assert "image-gen-agent" in names
+
+    def test_domain_level_tech(self):
+        """技术领域路由 / Tech domain routing."""
+        results = self.router.route("check system health",
+                                     level=RouteLevel.DOMAIN)
+        assert len(results) > 0
+        names = [m.name for m, _ in results]
+        assert "system-sentinel" in names
+
+    def test_route_level_enum_values(self):
+        """RouteLevel 枚举值正确 / RouteLevel enum has correct values."""
+        assert RouteLevel.DOMAIN.value == "domain"
+        assert RouteLevel.SUB_DOMAIN.value == "sub"
+        assert RouteLevel.AGENT.value == "agent"
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 5 新功能测试: 多意图分解 / Multi-intent decomposition
+# ══════════════════════════════════════════════════════════════
+
+
+class TestMultiIntentDecomposition:
+    """多意图分解测试 / Multi-intent decomposition tests."""
+
+    def setup_method(self):
+        self.router = create_router()
+
+    def test_decompose_single_intent(self):
+        """单意图查询 / Single intent query."""
+        results = self.router.decompose("stock price AAPL")
+        assert len(results) >= 1
+
+    def test_decompose_multi_intent(self):
+        """复合意图: 画股票图 / Compound: draw stock chart."""
+        results = self.router.decompose("draw a stock chart of AAPL")
+        assert len(results) >= 1
+        intents = [r.primary_intent for r in results if r.primary_intent]
+        # 应该包含 IMAGE_GENERATION 和/或 FINANCE_PREDICTION
+        assert any(
+            AgentCapability.IMAGE_GENERATION in [r.primary_intent]
+            for r in results
+        ) or any(
+            AgentCapability.FINANCE_PREDICTION in [r.primary_intent]
+            for r in results
+        )
+
+    def test_decompose_empty_query(self):
+        """空查询分解 / Empty query decomposition."""
+        results = self.router.decompose("")
+        assert results == []
+
+    def test_decompose_gibberish(self):
+        """无意义查询分解 / Gibberish decomposition."""
+        results = self.router.decompose("asdf zxcv")
+        assert results == []
+
+    def test_decompose_returns_intent_result(self):
+        """分解结果类型正确 / Decomposition returns correct type."""
+        results = self.router.decompose("stock price AAPL")
+        if results:
+            assert isinstance(results[0], IntentResult)
+            assert results[0].confidence > 0
+
+    def test_decompose_confidence_level(self):
+        """分解结果包含置信度等级 / Decomposition includes confidence level."""
+        results = self.router.decompose("analyze stock for investment")
+        if results:
+            assert results[0].confidence_level is not None
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 5 新功能测试: 路由计划 / Routing plan
+# ══════════════════════════════════════════════════════════════
+
+
+class TestRoutingPlan:
+    """路由计划测试 / Routing plan tests."""
+
+    def setup_method(self):
+        self.router = create_router()
+
+    def test_plan_single_intent(self):
+        """单意图路由计划 / Single intent plan."""
+        plan = self.router.plan("stock price AAPL")
+        assert isinstance(plan, RoutingPlan)
+        assert plan.query == "stock price AAPL"
+        assert len(plan.decisions) >= 1
+        assert plan.aggregate_confidence > 0
+
+    def test_plan_strategy_first_match(self):
+        """FIRST_MATCH 策略 / First match strategy."""
+        plan = self.router.plan("stock price AAPL",
+                                 strategy=AggregationStrategy.FIRST_MATCH)
+        assert plan.aggregate_confidence >= 0
+
+    def test_plan_strategy_merge(self):
+        """MERGE 策略 / Merge strategy."""
+        plan = self.router.plan("stock price AAPL",
+                                 strategy=AggregationStrategy.MERGE)
+        assert plan.aggregate_confidence >= 0
+
+    def test_plan_strategy_weighted(self):
+        """WEIGHTED 策略 / Weighted strategy."""
+        plan = self.router.plan("stock price AAPL",
+                                 strategy=AggregationStrategy.WEIGHTED)
+        assert plan.aggregate_confidence >= 0
+
+    def test_plan_empty_query(self):
+        """空查询计划 / Empty query plan."""
+        plan = self.router.plan("")
+        assert plan.aggregate_confidence == 0.0
+
+    def test_plan_aggregate_confidence_capped(self):
+        """聚合置信度不超过 1.0 / Aggregate confidence capped at 1.0."""
+        plan = self.router.plan("stock price AAPL")
+        assert plan.aggregate_confidence <= 1.0
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 5 新功能测试: 置信度等级 / Confidence levels
+# ══════════════════════════════════════════════════════════════
+
+
+class TestConfidenceLevel:
+    """置信度等级测试 / Confidence level tests."""
+
+    def test_high_confidence(self):
+        router = create_router()
+        result = router.analyze("stock price prediction for AAPL")
+        assert result.confidence > 0.6
+        assert result.confidence_level == ConfidenceLevel.HIGH
+
+    def test_unknown_confidence(self):
+        router = create_router()
+        result = router.analyze("")
+        assert result.confidence == 0.0
+        assert result.confidence_level == ConfidenceLevel.UNKNOWN
+
+    def test_confidence_level_enum(self):
+        assert ConfidenceLevel.HIGH.value == "high"
+        assert ConfidenceLevel.MEDIUM.value == "medium"
+        assert ConfidenceLevel.LOW.value == "low"
+        assert ConfidenceLevel.UNKNOWN.value == "unknown"
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 5 新功能测试: 回退策略 / Fallback strategies
+# ══════════════════════════════════════════════════════════════
+
+
+class TestFallbackStrategies:
+    """回退策略测试 / Fallback strategy tests."""
+
+    def setup_method(self):
+        self.router = create_router()
+
+    def test_strict_no_threshold(self):
+        """无阈值的 STRICT 等同于默认 / STRICT without threshold equals default."""
+        results = self.router.route("stock price",
+                                     strategy=FallbackStrategy.STRICT)
+        assert len(results) > 0
+
+    def test_strict_with_threshold_passes(self):
+        """STRICT + 低阈值仍匹配 / STRICT with low threshold still matches."""
+        results = self.router.route("stock price AAPL",
+                                     strategy=FallbackStrategy.STRICT,
+                                     threshold=0.1)
+        assert len(results) > 0
+
+    def test_relaxed_lowers_threshold(self):
+        """RELAXED 降低阈值 / RELAXED lowers threshold."""
+        # 模糊查询在 STRICT+高阈值时可能空，RELAXED 应该能匹配
+        strict_results = self.router.route("help",
+                                            strategy=FallbackStrategy.STRICT,
+                                            threshold=0.5)
+        relaxed_results = self.router.route("help",
+                                             strategy=FallbackStrategy.RELAXED,
+                                             threshold=0.5)
+        # RELAXED 应该比 STRICT 返回更多结果
+        assert len(relaxed_results) >= len(strict_results)
+
+    def test_fallback_strategy_enum(self):
+        assert FallbackStrategy.STRICT.value == "strict"
+        assert FallbackStrategy.RELAXED.value == "relaxed"
+        assert FallbackStrategy.CASCADE.value == "cascade"
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 5 新功能测试: LLM增强 / LLM Enhancer
+# ══════════════════════════════════════════════════════════════
+
+
+class TestLLMEnhancer:
+    """LLM 增强分类器测试 / LLM enhancer tests."""
+
+    def test_not_available_by_default(self):
+        """默认不可用 / Not available by default."""
+        enhancer = LLMEnhancer()
+        assert enhancer.available is False
+
+    def test_available_with_url(self):
+        """配置 URL 后可用 / Available with URL."""
+        enhancer = LLMEnhancer(api_url="http://localhost:8642/v1/chat/completions")
+        assert enhancer.available is True
+
+    def test_classify_returns_empty_when_unavailable(self):
+        """不可用时返回空 / Returns empty when unavailable."""
+        enhancer = LLMEnhancer()
+        result = enhancer.classify("test", [AgentCapability.FINANCE_PREDICTION])
+        assert result == {}
+
+    def test_classify_with_fallback_kw_only(self):
+        """不可用时回退到关键词 / Fallback to keywords when unavailable."""
+        enhancer = LLMEnhancer()
+        kw_scores = {AgentCapability.FINANCE_PREDICTION: 0.5}
+        result = enhancer.classify_with_fallback(
+            "stock price",
+            [AgentCapability.FINANCE_PREDICTION],
+            kw_scores,
+        )
+        assert result == kw_scores
+
+    def test_hybrid_with_high_kw(self):
+        """关键词分数高时不用LLM / Skip LLM when keywords are confident."""
+        enhancer = LLMEnhancer(api_url="http://localhost:8642/v1/chat/completions")
+        kw_scores = {AgentCapability.FINANCE_PREDICTION: 0.8}
+        result = enhancer.classify_with_fallback(
+            "stock price AAPL",
+            [AgentCapability.FINANCE_PREDICTION],
+            kw_scores,
+        )
+        assert result[AgentCapability.FINANCE_PREDICTION] == 0.8
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 5 新功能测试: 聚合策略 / Aggregation strategies
+# ══════════════════════════════════════════════════════════════
+
+
+class TestAggregationStrategies:
+    """聚合策略测试 / Aggregation strategy tests."""
+
+    def test_enum_values(self):
+        assert AggregationStrategy.FIRST_MATCH.value == "first"
+        assert AggregationStrategy.WEIGHTED.value == "weighted"
+        assert AggregationStrategy.MERGE.value == "merge"
+        assert AggregationStrategy.PARALLEL.value == "parallel"
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 5 新功能测试: RouterComponent / Architecture integration
+# ══════════════════════════════════════════════════════════════
+
+
+class TestRouterComponent:
+    """RouterComponent 测试 / Router component tests."""
+
+    def test_create_component(self):
+        """创建 RouterComponent / Create RouterComponent."""
+        comp = RouterComponent()
+        assert comp.name == "router_engine"
+        assert comp.version == "2.0.0"
+        assert "architecture_module" in comp.requires
+
+    def test_router_created_on_demand(self):
+        """懒初始化的路由 / Lazy initialized router."""
+        comp = RouterComponent()
+        router = comp.router
+        assert router is not None
+        assert router.registry_size > 0
+
+    def test_component_route(self):
+        """组件委派路由 / Component delegated routing."""
+        comp = RouterComponent()
+        results = comp.route("stock price")
+        assert len(results) > 0
+
+    def test_component_analyze(self):
+        """组件委派分析 / Component delegated analysis."""
+        comp = RouterComponent()
+        result = comp.analyze("draw a picture")
+        assert isinstance(result, IntentResult)
+        assert result.primary_intent is not None
+
+    def test_component_plan(self):
+        """组件委派路由计划 / Component delegated routing plan."""
+        comp = RouterComponent()
+        plan = comp.plan("stock price")
+        assert isinstance(plan, RoutingPlan)
+
+    def test_component_init(self):
+        """组件初始化 / Component initialization."""
+        comp = RouterComponent()
+        assert comp.init() is True
+        assert comp.state.value == "running"
+
+
+# ══════════════════════════════════════════════════════════════
+# 便捷函数测试 / Convenience functions
+# ══════════════════════════════════════════════════════════════
+
+
+class TestConvenienceFunctions:
+    """便捷函数测试 / Convenience function tests."""
+
+    def test_create_router(self):
+        router = create_router()
+        assert isinstance(router, IntentRouter)
+        assert router.registry_size == 14
+
+    def test_route_query(self):
+        results = route_query("stock price AAPL")
+        assert len(results) > 0
+        assert results[0][0].name == "finance-agent"

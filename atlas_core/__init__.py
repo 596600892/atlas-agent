@@ -7,7 +7,7 @@ Each agent contributes its core capability module.
 See: https://github.com/596600892/atlas-agent
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 from atlas_core.architecture import (
     # Phase 1: Core types
@@ -43,4 +43,25 @@ from atlas_core.memory_engine import (
     MemoryConsolidator,
     MemoryEngine,
     create_memory_engine,
+)
+
+# Phase 5: Router Engine v2
+from atlas_core.router_engine import (
+    # Core types
+    AgentManifest as RouterManifest,
+    IntentResult,
+    RoutingPlan,
+    # Enums
+    RouteLevel,
+    ConfidenceLevel,
+    FallbackStrategy,
+    AggregationStrategy,
+    # Classes
+    IntentRouter,
+    LLMEnhancer,
+    RouterComponent,
+    # Convenience
+    create_router,
+    route_query,
+    create_router_component,
 )
