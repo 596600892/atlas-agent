@@ -44,10 +44,16 @@ class VoiceConfig:
     wake_words: list[str] = field(default_factory=lambda: ["hey atlas", "atlas", "hello atlas"])
     wake_word_required: bool = True        # 是否需要唤醒词 / require wake word
 
+    # STT engine / 语音识别引擎
+    stt_engine: str = "google"             # "google" | "whisper" — 识别引擎类型 / recognition engine type
+    whisper_model: str = "whisper-1"       # OpenAI Whisper 模型名 / Whisper model name
+    whisper_api_key: Optional[str] = None  # Whisper API Key, None=从 OPENAI_API_KEY 环境变量读取 / None=use env var
+
     # TTS / 语音合成
     voice_rate: int = 180                  # 语速 (words per minute) / speech rate
     voice_volume: float = 1.0             # 音量 0.0~1.0 / volume
     voice_id: Optional[str] = None         # None = 系统默认语音 / system default voice
+    tts_save_dir: Optional[str] = None     # TTS 文件保存目录 / TTS save directory
 
 
 # ══════════════════════════════════════════════════════════════
@@ -208,23 +214,53 @@ class SpeechToText:
                 audio.sample_rate * audio.sample_width
             )
 
-            # 使用 Google Web Speech API 进行识别
-            # Using Google Web Speech API for recognition
-            try:
-                text = self._recognizer.recognize_google(
-                    audio, language=self.config.language
-                )
-                result["success"] = True
-                result["text"] = text
-                result["confidence"] = 1.0  # Google API 不返回置信度 / doesn't return confidence
-                logger.info(f"Recognized: \"{text}\"")
-            except LookupError:
-                # 语音无法理解 / speech was unintelligible
-                result["error"] = "Speech unintelligible"
-                logger.warning("Speech was unintelligible")
-            except Exception as e:
-                result["error"] = f"Recognition failed: {e}"
-                logger.error(f"Recognition error: {e}")
+            # 根据配置选择识别引擎 / select recognition engine
+            if self.config.stt_engine == "whisper":
+                whisper_result = self._recognize_whisper(audio)
+                if whisper_result["success"]:
+                    result["success"] = True
+                    result["text"] = whisper_result["text"]
+                    result["confidence"] = whisper_result["confidence"]
+                    logger.info(f"Whisper recognized: \"{whisper_result['text']}\"")
+                else:
+                    logger.warning(
+                        f"Whisper failed, falling back to Google: "
+                        f"{whisper_result['error']}"
+                    )
+                    result["error"] = whisper_result["error"]
+                    # 降级到 Google API / fallback to Google
+                    try:
+                        text = self._recognizer.recognize_google(
+                            audio, language=self.config.language
+                        )
+                        result["success"] = True
+                        result["text"] = text
+                        result["confidence"] = 1.0
+                        result["error"] = None
+                        logger.info(f"Google fallback recognized: \"{text}\"")
+                    except LookupError:
+                        result["error"] = "Speech unintelligible (Google fallback)"
+                        logger.warning("Speech was unintelligible (Google fallback)")
+                    except Exception as e:
+                        result["error"] = f"Recognition failed (Google fallback): {e}"
+                        logger.error(f"Recognition error (Google fallback): {e}")
+            else:
+                # 使用 Google Web Speech API / Using Google Web Speech API
+                try:
+                    text = self._recognizer.recognize_google(
+                        audio, language=self.config.language
+                    )
+                    result["success"] = True
+                    result["text"] = text
+                    result["confidence"] = 1.0  # Google API 不返回置信度
+                    logger.info(f"Recognized: \"{text}\"")
+                except LookupError:
+                    # 语音无法理解 / speech was unintelligible
+                    result["error"] = "Speech unintelligible"
+                    logger.warning("Speech was unintelligible")
+                except Exception as e:
+                    result["error"] = f"Recognition failed: {e}"
+                    logger.error(f"Recognition error: {e}")
 
         except queue.Empty:
             # 超时 — 没有说话 / timeout — no speech detected
@@ -268,6 +304,87 @@ class SpeechToText:
                 return last_result
 
         return last_result or {"success": False, "error": "All retries exhausted"}
+
+    # ── Whisper API / OpenAI Whisper 识别 ────────────────────
+
+    def _recognize_whisper(self, audio_data) -> dict:
+        """
+        使用 OpenAI Whisper API 识别语音 /
+        Recognize speech using OpenAI Whisper API.
+
+        Args:
+            audio_data: speech_recognition.AudioData 对象
+
+        Returns:
+            dict: {"success": bool, "text": str|None, "confidence": float|None, "error": str|None}
+        """
+        import os
+        import tempfile
+        import wave
+
+        api_key = self.config.whisper_api_key or os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return {
+                "success": False,
+                "text": None,
+                "confidence": None,
+                "error": "No OpenAI API key available",
+            }
+
+        try:
+            from openai import OpenAI
+        except ImportError:
+            return {
+                "success": False,
+                "text": None,
+                "confidence": None,
+                "error": "openai package not installed (pip install openai)",
+            }
+
+        # 将 AudioData 保存为临时 WAV 文件 / save AudioData to temp WAV
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp_path = tmp.name
+                with wave.open(tmp_path, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(audio_data.sample_width)
+                    wf.setframerate(audio_data.sample_rate)
+                    wf.writeframes(audio_data.frame_data)
+
+            # 将语言代码转为 Whisper 格式 / convert language code for Whisper
+            lang = self.config.language.split("-")[0]  # "zh-CN" → "zh"
+
+            client = OpenAI(api_key=api_key)
+            with open(tmp_path, "rb") as audio_file:
+                transcript = client.audio.transcriptions.create(
+                    model=self.config.whisper_model,
+                    file=audio_file,
+                    language=lang,
+                )
+
+            logger.info(f"Whisper recognized: \"{transcript.text}\"")
+            return {
+                "success": True,
+                "text": transcript.text,
+                "confidence": 0.95,
+                "error": None,
+            }
+
+        except Exception as e:
+            logger.error(f"Whisper API error: {e}")
+            return {
+                "success": False,
+                "text": None,
+                "confidence": None,
+                "error": f"Whisper API error: {e}",
+            }
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
 
 # ══════════════════════════════════════════════════════════════
@@ -518,6 +635,147 @@ class TextToSpeech:
             return {"success": True, "error": None}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    # ── Audio File Output / 音频文件输出 ─────────────────────
+
+    def save_to_file(self, text: str, filepath: str) -> dict:
+        """
+        将文本合成为音频文件并保存 /
+        Synthesize text and save as audio file.
+
+        使用 macOS `say` 命令生成 AIFF 音频文件。
+        Uses macOS `say` command to generate AIFF audio.
+
+        Args:
+            text: 要朗读的文本 / text to speak
+            filepath: 输出文件路径 / output file path
+
+        Returns:
+            dict: {"success": bool, "error": str | None, "filepath": str}
+        """
+        import os
+        import subprocess
+
+        if not text or not text.strip():
+            return {"success": False, "error": "Empty text", "filepath": filepath}
+
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
+            result = subprocess.run(
+                ["say", "-o", filepath, text],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                logger.info(f"TTS audio saved to {filepath} ({len(text)} chars)")
+                return {"success": True, "error": None, "filepath": filepath}
+            else:
+                return {
+                    "success": False,
+                    "error": f"say command failed: {result.stderr.strip()}",
+                    "filepath": filepath,
+                }
+        except FileNotFoundError:
+            return {
+                "success": False,
+                "error": "say command not found (not macOS?)",
+                "filepath": filepath,
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "error": "say command timed out",
+                "filepath": filepath,
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"save_to_file error: {e}",
+                "filepath": filepath,
+            }
+
+    def speak_and_save(self, text: str, filepath: str | None = None) -> dict:
+        """
+        朗读文本并同时保存到文件 /
+        Speak text and also save to audio file.
+
+        如果 filepath 提供则使用指定路径，否则使用 tts_save_dir 配置。
+        Uses provided filepath or falls back to tts_save_dir config.
+
+        Args:
+            text: 要朗读的文本 / text to speak
+            filepath: 可选文件路径 / optional output file path
+
+        Returns:
+            dict: {"success": bool, "speak": dict, "save": dict|None, "error": str|None}
+        """
+        speak_result = self.speak(text, blocking=True)
+        if not speak_result["success"]:
+            return speak_result
+
+        save_path = filepath
+        if not save_path and self.config.tts_save_dir:
+            import hashlib
+            import os
+
+            hash_str = hashlib.md5(text.encode()).hexdigest()[:8]
+            save_path = os.path.join(
+                self.config.tts_save_dir, f"tts_{hash_str}.aiff"
+            )
+
+        if save_path:
+            save_result = self.save_to_file(text, save_path)
+            return {
+                "success": speak_result["success"] and save_result["success"],
+                "speak": speak_result,
+                "save": save_result,
+                "error": save_result.get("error") if not save_result["success"] else None,
+            }
+
+        return speak_result
+
+    # ── Presets / 预设 ───────────────────────────────────────
+
+    # 语速音量预设 / speech rate and volume presets
+    PRESETS: dict = {
+        "normal": {"rate": 180, "volume": 1.0, "desc": "标准语速音量"},
+        "slow": {"rate": 120, "volume": 1.2, "desc": "慢速清晰"},
+        "fast": {"rate": 250, "volume": 0.9, "desc": "快速简洁"},
+        "soft": {"rate": 160, "volume": 0.6, "desc": "轻柔"},
+        "loud": {"rate": 200, "volume": 1.5, "desc": "大声"},
+    }
+
+    @classmethod
+    def list_presets(cls) -> dict:
+        """列出所有可用预设 / List all available presets."""
+        return dict(cls.PRESETS)
+
+    def apply_preset(self, name: str) -> dict:
+        """
+        应用预设 / Apply a voice preset.
+
+        Args:
+            name: 预设名称 / preset name (normal, slow, fast, soft, loud)
+
+        Returns:
+            dict: {"success": bool, "preset": str, "rate": int, "volume": float, "error": str|None}
+        """
+        if name not in self.PRESETS:
+            return {
+                "success": False,
+                "error": f"Unknown preset: {name}. "
+                         f"Available: {list(self.PRESETS.keys())}",
+            }
+        preset = self.PRESETS[name]
+        self.set_rate(preset["rate"])
+        self.set_volume(preset["volume"])
+        return {
+            "success": True,
+            "preset": name,
+            "rate": preset["rate"],
+            "volume": preset["volume"],
+        }
 
 
 # ══════════════════════════════════════════════════════════════

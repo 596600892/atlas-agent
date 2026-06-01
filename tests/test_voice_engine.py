@@ -768,5 +768,323 @@ class TestVoiceConfigIntegration:
         assert "hey atlas" in conv.wake_detector.phrases
 
 
+# ══════════════════════════════════════════════════════════════
+# Phase 3: Whisper API Tests / Whisper API 测试
+# ══════════════════════════════════════════════════════════════
+
+
+class TestWhisperRecognition:
+    """Whisper API 识别测试（模拟）/ Whisper API recognition tests (mocked)."""
+
+    def test_whisper_no_api_key_fallback_fails(self):
+        """无 API Key 时报错，且 Google 备用也失败 /
+        Reports error when no API key and Google fallback also fails."""
+        config = VoiceConfig(stt_engine="whisper", whisper_api_key=None)
+        with patch("speech_recognition.Recognizer") as mock_rec_cls, \
+             patch("speech_recognition.Microphone") as mock_mic_cls:
+            mock_recognizer = MagicMock()
+            mock_recognizer.energy_threshold = 3000
+            mock_recognizer.pause_threshold = 0.8
+            mock_recognizer.dynamic_energy_threshold = True
+            mock_rec_cls.return_value = mock_recognizer
+
+            mock_mic = MagicMock()
+            mock_mic.__enter__.return_value = mock_mic
+            mock_mic.__exit__.return_value = None
+            mock_mic_cls.return_value = mock_mic
+
+            mock_audio = MagicMock()
+            mock_audio.frame_data = b"\x00" * 16000
+            mock_audio.sample_rate = 16000
+            mock_audio.sample_width = 2
+            mock_recognizer.listen.return_value = mock_audio
+
+            # Google 备用也失败
+            mock_recognizer.recognize_google.side_effect = LookupError()
+
+            stt = SpeechToText(config=config)
+            stt._initialized = False
+
+            # Whisper 无 API key → 降级 Google → Google 也失败
+            result = stt.listen(timeout=2.0)
+            assert result["success"] is False
+            assert "unintelligible" in result.get("error", "").lower()
+
+    def test_whisper_no_openai_package(self):
+        """缺少 openai 包时降级 / Falls back when openai package missing."""
+        config = VoiceConfig(stt_engine="whisper", whisper_api_key="sk-test")
+        with patch("speech_recognition.Recognizer") as mock_rec_cls, \
+             patch("speech_recognition.Microphone") as mock_mic_cls, \
+             patch.dict("sys.modules", {"openai": None}):
+
+            mock_recognizer = MagicMock()
+            mock_recognizer.energy_threshold = 3000
+            mock_recognizer.pause_threshold = 0.8
+            mock_recognizer.dynamic_energy_threshold = True
+            mock_rec_cls.return_value = mock_recognizer
+
+            mock_mic = MagicMock()
+            mock_mic.__enter__.return_value = mock_mic
+            mock_mic.__exit__.return_value = None
+            mock_mic_cls.return_value = mock_mic
+
+            mock_audio = MagicMock()
+            mock_audio.frame_data = b"\x00" * 16000
+            mock_audio.sample_rate = 16000
+            mock_audio.sample_width = 2
+            mock_recognizer.listen.return_value = mock_audio
+
+            # 模拟 openai 导入失败 — 应降级到 Google
+            mock_recognizer.recognize_google.return_value = "fallback text"
+
+            stt = SpeechToText(config=config)
+            stt._initialized = False
+
+            result = stt.listen(timeout=2.0)
+            # 应降级到 Google 并成功
+            assert result["success"] is True
+            assert result["text"] == "fallback text"
+
+    def test_whisper_api_success(self):
+        """Whisper API 成功识别 / Whisper API recognition success."""
+        config = VoiceConfig(stt_engine="whisper", whisper_api_key="sk-test")
+        with patch("speech_recognition.Recognizer") as mock_rec_cls, \
+             patch("speech_recognition.Microphone") as mock_mic_cls, \
+             patch("atlas_core.voice_engine.SpeechToText._recognize_whisper") as mock_whisper:
+
+            mock_recognizer = MagicMock()
+            mock_recognizer.energy_threshold = 3000
+            mock_recognizer.pause_threshold = 0.8
+            mock_recognizer.dynamic_energy_threshold = True
+            mock_rec_cls.return_value = mock_recognizer
+
+            mock_mic = MagicMock()
+            mock_mic.__enter__.return_value = mock_mic
+            mock_mic.__exit__.return_value = None
+            mock_mic_cls.return_value = mock_mic
+
+            mock_audio = MagicMock()
+            mock_audio.frame_data = b"\x00" * 16000
+            mock_audio.sample_rate = 16000
+            mock_audio.sample_width = 2
+            mock_recognizer.listen.return_value = mock_audio
+
+            mock_whisper.return_value = {
+                "success": True, "text": "whisper result",
+                "confidence": 0.95, "error": None,
+            }
+
+            stt = SpeechToText(config=config)
+            stt._initialized = False
+
+            result = stt.listen(timeout=2.0)
+            assert result["success"] is True
+            assert result["text"] == "whisper result"
+            assert result["confidence"] == 0.95
+            mock_whisper.assert_called_once()
+
+    def test_whisper_fallback_to_google(self):
+        """Whisper 失败时降级到 Google / Falls back to Google on Whisper failure."""
+        config = VoiceConfig(stt_engine="whisper", whisper_api_key="sk-test")
+        with patch("speech_recognition.Recognizer") as mock_rec_cls, \
+             patch("speech_recognition.Microphone") as mock_mic_cls, \
+             patch("atlas_core.voice_engine.SpeechToText._recognize_whisper") as mock_whisper:
+
+            mock_recognizer = MagicMock()
+            mock_recognizer.energy_threshold = 3000
+            mock_recognizer.pause_threshold = 0.8
+            mock_recognizer.dynamic_energy_threshold = True
+            mock_rec_cls.return_value = mock_recognizer
+
+            mock_mic = MagicMock()
+            mock_mic.__enter__.return_value = mock_mic
+            mock_mic.__exit__.return_value = None
+            mock_mic_cls.return_value = mock_mic
+
+            mock_audio = MagicMock()
+            mock_audio.frame_data = b"\x00" * 16000
+            mock_audio.sample_rate = 16000
+            mock_audio.sample_width = 2
+            mock_recognizer.listen.return_value = mock_audio
+
+            # Whisper 失败
+            mock_whisper.return_value = {
+                "success": False, "text": None,
+                "confidence": None, "error": "Whisper API error: 401",
+            }
+            # Google 备用成功
+            mock_recognizer.recognize_google.return_value = "google fallback"
+
+            stt = SpeechToText(config=config)
+            stt._initialized = False
+
+            result = stt.listen(timeout=2.0)
+            assert result["success"] is True
+            assert result["text"] == "google fallback"
+
+    def test_listen_google_default(self):
+        """默认使用 Google 引擎 / Default STT engine is Google."""
+        config = VoiceConfig(stt_engine="google")  # 默认值
+        with patch("speech_recognition.Recognizer") as mock_rec_cls, \
+             patch("speech_recognition.Microphone") as mock_mic_cls:
+
+            mock_recognizer = MagicMock()
+            mock_recognizer.energy_threshold = 3000
+            mock_recognizer.pause_threshold = 0.8
+            mock_recognizer.dynamic_energy_threshold = True
+            mock_rec_cls.return_value = mock_recognizer
+
+            mock_mic = MagicMock()
+            mock_mic.__enter__.return_value = mock_mic
+            mock_mic.__exit__.return_value = None
+            mock_mic_cls.return_value = mock_mic
+
+            mock_audio = MagicMock()
+            mock_audio.frame_data = b"\x00" * 16000
+            mock_audio.sample_rate = 16000
+            mock_audio.sample_width = 2
+            mock_recognizer.listen.return_value = mock_audio
+            mock_recognizer.recognize_google.return_value = "google result"
+
+            stt = SpeechToText(config=config)
+            stt._initialized = False
+
+            result = stt.listen(timeout=2.0)
+            assert result["success"] is True
+            assert result["text"] == "google result"
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 3: TTS Enhancement Tests / TTS 增强测试
+# ══════════════════════════════════════════════════════════════
+
+
+class TestTTSPresets:
+    """TTS 预设测试 / TTS presets tests."""
+
+    def test_list_presets(self):
+        """列出预设 / List all presets."""
+        presets = TextToSpeech.list_presets()
+        assert "normal" in presets
+        assert "slow" in presets
+        assert "fast" in presets
+        assert len(presets) >= 5
+
+    def test_apply_preset_valid(self):
+        """应用有效预设 / Apply valid preset."""
+        with patch("pyttsx3.init") as mock_init:
+            mock_engine = MagicMock()
+            mock_init.return_value = mock_engine
+
+            tts = TextToSpeech()
+            result = tts.apply_preset("slow")
+            assert result["success"] is True
+            assert result["preset"] == "slow"
+            assert result["rate"] == 120
+
+    def test_apply_preset_invalid(self):
+        """应用无效预设 / Apply invalid preset."""
+        with patch("pyttsx3.init") as mock_init:
+            mock_engine = MagicMock()
+            mock_init.return_value = mock_engine
+
+            tts = TextToSpeech()
+            result = tts.apply_preset("nonexistent")
+            assert result["success"] is False
+            assert "unknown" in result.get("error", "").lower()
+
+
+class TestTTSSaveToFile:
+    """TTS 文件输出测试 / TTS save_to_file tests."""
+
+    def test_save_to_file_empty_text(self):
+        """空文本保存 / Save with empty text."""
+        with patch("pyttsx3.init") as mock_init:
+            mock_engine = MagicMock()
+            mock_init.return_value = mock_engine
+
+            tts = TextToSpeech()
+            result = tts.save_to_file("", "/tmp/test.aiff")
+            assert result["success"] is False
+            assert "empty" in result.get("error", "").lower()
+
+    def test_save_to_file_say_not_found(self):
+        """say 命令未找到 / say command not found."""
+        with patch("pyttsx3.init") as mock_init:
+            mock_engine = MagicMock()
+            mock_init.return_value = mock_engine
+
+            tts = TextToSpeech()
+            with patch("subprocess.run", side_effect=FileNotFoundError()):
+                result = tts.save_to_file("hello", "/tmp/test.aiff")
+                assert result["success"] is False
+                assert "not found" in result.get("error", "")
+
+    def test_save_to_file_success(self):
+        """保存成功 / Save success."""
+        with patch("pyttsx3.init") as mock_init:
+            mock_engine = MagicMock()
+            mock_init.return_value = mock_engine
+
+            tts = TextToSpeech()
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stderr="")
+                result = tts.save_to_file("hello world", "/tmp/test.aiff")
+                assert result["success"] is True
+                assert result["filepath"] == "/tmp/test.aiff"
+                mock_run.assert_called_once()
+
+    def test_speak_and_save_with_filepath(self):
+        """朗读并保存 / Speak and save with filepath."""
+        with patch("pyttsx3.init") as mock_init:
+            mock_engine = MagicMock()
+            mock_init.return_value = mock_engine
+
+            tts = TextToSpeech()
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stderr="")
+                result = tts.speak_and_save("hello", "/tmp/test.aiff")
+                assert result["success"] is True
+                assert "speak" in result
+                assert "save" in result
+                assert result["save"]["success"] is True
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 3: Config Tests / 配置测试
+# ══════════════════════════════════════════════════════════════
+
+
+class TestVoiceConfigPhase3:
+    """Phase 3 新增配置测试 / Phase 3 config tests."""
+
+    def test_default_stt_engine(self):
+        """默认 STT 引擎是 google / Default STT engine is google."""
+        config = VoiceConfig()
+        assert config.stt_engine == "google"
+
+    def test_whisper_config(self):
+        """Whisper 配置 / Whisper configuration."""
+        config = VoiceConfig(
+            stt_engine="whisper",
+            whisper_model="whisper-1",
+            whisper_api_key="sk-abc123",
+        )
+        assert config.stt_engine == "whisper"
+        assert config.whisper_model == "whisper-1"
+        assert config.whisper_api_key == "sk-abc123"
+
+    def test_tts_save_dir_config(self):
+        """TTS 保存目录配置 / TTS save directory config."""
+        config = VoiceConfig(tts_save_dir="/tmp/tts_output")
+        assert config.tts_save_dir == "/tmp/tts_output"
+
+    def test_config_propagates_tts_save_dir(self):
+        """配置传播到 Conversation / Config propagates tts_save_dir."""
+        config = VoiceConfig(tts_save_dir="/tmp/tts_output")
+        conv = Conversation(config=config)
+        assert conv.config.tts_save_dir == "/tmp/tts_output"
+
+
 if __name__ == "__main__":
     pytest.main(["-v", __file__])
