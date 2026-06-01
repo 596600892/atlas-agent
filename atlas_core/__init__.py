@@ -18,3 +18,11 @@ from atlas_core.architecture import (
     MemoryEntry,
     RoutingDecision,
 )
+
+from atlas_core.memory_engine import (
+    MemoryStore,
+    ImportanceScorer,
+    PruningStrategy,
+    ContextInjector,
+    create_memory_engine,
+)

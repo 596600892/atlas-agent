@@ -3,3 +3,8 @@
 # This package only provides integration interfaces
 
 pytest>=7.0
+
+# Voice Engine (atlas_core/voice_engine.py)
+SpeechRecognition>=3.10  # 语音识别 / speech-to-text
+pyttsx3>=2.90            # 离线语音合成 / offline TTS
+pyaudio>=0.2.11          # 麦克风音频输入 / microphone audio input
