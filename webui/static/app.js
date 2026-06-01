@@ -83,6 +83,20 @@ const $$ = (s) => document.querySelectorAll(s);
   // ── 语音面板 ──
   AtlasVoicePanel.init('voicePanel');
 
+  // ── 资料面板 ──
+  AtlasProfile.init();
+
+  // ── 右侧面板标签切换 ──
+  document.querySelectorAll('.panel-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel-tab-pane').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      const pane = document.getElementById('panel' + tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1));
+      if (pane) pane.classList.add('active');
+    });
+  });
+
   // ── 主题选择器 ──
   $$('.theme-dot').forEach(dot => {
     dot.addEventListener('click', () => {

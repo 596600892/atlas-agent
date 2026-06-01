@@ -104,14 +104,26 @@
     </div>
 
     <div class="panel-section" style="flex:1; overflow:hidden;">
-      <div class="section-label">活动流</div>
-      <div style="overflow-y:auto; max-height:160px;" id="streamContainer">
-        <div class="agent-stream-item">
-          <span class="agent-stream-dot"></span>
-          等待活动信号…
-          <span class="stream-timestamp">--:--</span>
+      <div class="panel-tabs">
+      <button class="panel-tab active" data-tab="stream">活动流</button>
+      <button class="panel-tab" data-tab="profile">资料</button>
+    </div>
+    <div class="panel-tab-content">
+      <div class="panel-tab-pane active" id="panelStream">
+        <div style="overflow-y:auto; max-height:160px;" id="streamContainer">
+          <div class="agent-stream-item">
+            <span class="agent-stream-dot"></span>
+            等待活动信号…
+            <span class="stream-timestamp">--:--</span>
+          </div>
         </div>
       </div>
+      <div class="panel-tab-pane" id="panelProfile">
+        <div id="profileContainer">
+          <div class="profile-empty">点击人物名查看资料</div>
+        </div>
+      </div>
+    </div>
     </div>
   </aside>
 
@@ -286,6 +298,7 @@
   <script src="chat.js"></script>
   <script src="thought-stream.js"></script>
   <script src="voice-panel.js"></script>
+  <script src="profile-panel.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="hotspot-earth.js"></script>
   <script src="app.js"></script>

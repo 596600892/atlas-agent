@@ -113,7 +113,24 @@ const AtlasChat = (() => {
 
     const textEl = document.createElement('div');
     textEl.className = 'bubble-text';
-    textEl.textContent = text;
+    // 处理 @提及 → 可点击人物链接
+    textEl.innerHTML = text.replace(
+      /@(\w+)/g,
+      '<a class="profile-mention" data-person="$1" href="#">@$1</a>'
+    );
+    // 绑定点击事件
+    textEl.querySelectorAll('.profile-mention').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        const person = e.target.dataset.person;
+        if (AtlasProfile) {
+          AtlasProfile.show(person);
+          // 切换到资料标签
+          const profileTab = document.querySelector('.panel-tab[data-tab="profile"]');
+          if (profileTab) profileTab.click();
+        }
+      });
+    });
     content.appendChild(textEl);
 
     const time = new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });

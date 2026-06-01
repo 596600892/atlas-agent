@@ -999,3 +999,227 @@ html, body {
   color: var(--ink);
   background: rgba(100, 180, 240, 0.1);
 }
+
+/* ── Panel Tabs ──────────────────────────── */
+
+.panel-tabs {
+  display: flex;
+  gap: 1px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.panel-tab {
+  background: none;
+  border: none;
+  color: var(--dim);
+  padding: 6px 12px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.panel-tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--cool);
+}
+
+.panel-tab-content {
+  height: calc(100% - 24px);
+  overflow: hidden;
+}
+
+.panel-tab-pane {
+  display: none;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.panel-tab-pane.active {
+  display: block;
+}
+
+/* ── Profile Panel ───────────────────────── */
+
+.profile-empty {
+  font-size: 10px;
+  color: var(--dim);
+  padding: 20px 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.profile-card {
+  padding: 12px;
+  animation: profileFadeIn 0.3s ease;
+}
+
+@keyframes profileFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.profile-card.temp {
+  opacity: 0.6;
+}
+
+.profile-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--cool), var(--warm));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 10px;
+}
+
+.profile-info {
+  margin-bottom: 10px;
+}
+
+.profile-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.profile-role {
+  font-size: 10px;
+  color: var(--cool);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+.profile-desc {
+  font-size: 10px;
+  color: var(--ink2);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.profile-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.profile-tag {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--dim);
+  background: var(--line-strong);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.profile-btn {
+  background: none;
+  border: 1px solid var(--line-strong);
+  color: var(--dim);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-mono);
+}
+
+.profile-btn:hover {
+  border-color: var(--cool);
+  color: var(--ink);
+  background: rgba(100, 180, 240, 0.05);
+}
+
+/* ── Wiki ────────────────────────────────── */
+
+.profile-wiki {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease;
+}
+
+.profile-wiki.open {
+  max-height: 400px;
+}
+
+.wiki-loading,
+.wiki-error {
+  font-size: 10px;
+  color: var(--dim);
+  padding: 8px 0;
+  font-family: var(--font-mono);
+}
+
+.wiki-error { color: var(--warm); }
+
+.wiki-result {
+  padding: 8px 0;
+  border-top: 1px solid var(--line-strong);
+  margin-top: 4px;
+}
+
+.wiki-thumb {
+  float: right;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin: 0 0 4px 8px;
+}
+
+.wiki-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.wiki-extract {
+  font-size: 10px;
+  color: var(--ink2);
+  line-height: 1.5;
+}
+
+.wiki-link {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--cool);
+  margin-top: 6px;
+  text-decoration: none;
+  font-family: var(--font-mono);
+}
+
+.wiki-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Profile Mention (@) ─────────────────── */
+
+.profile-mention {
+  color: var(--cool);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--cool);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.profile-mention:hover {
+  color: #fff;
+  border-bottom-color: #fff;
+  background: rgba(100, 180, 240, 0.15);
+  border-radius: 2px;
+}
