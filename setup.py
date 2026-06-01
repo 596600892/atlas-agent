@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="atlas-agent",
-    version="0.1.0",
+    version="0.2.0",
     description="Atlas — The universal AI agent. Voice-first, self-evolving, permanently-memorious.",
     long_description=(Path(__file__).parent / "README.md").read_text(),
     long_description_content_type="text/markdown",
@@ -20,6 +20,7 @@ setup(
     extras_require={
         "dev": ["pytest>=7.0", "black", "ruff"],
         "voice": ["speechrecognition", "pyttsx3", "pyaudio"],
+        "vector": ["sentence-transformers>=2.0"],
     },
     entry_points={
         "console_scripts": [

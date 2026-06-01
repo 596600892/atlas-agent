@@ -11,12 +11,16 @@ Usage / 使用方法:
     atlas ask <query>  — One-shot query / 单次查询
     atlas info         — Show system info / 显示系统信息
     atlas agents       — List registered agents / 列出已注册Agent
-    atlas memory search <query> — Search memory / 搜索记忆
-    atlas check        — Verify all modules / 检查所有模块
+    atlas memory search <query>   Search memory / 搜索记忆
+    atlas memory semantic <query> Semantic search / 语义搜索
+    atlas memory graph <id>       Show memory graph / 记忆图谱
+    atlas memory consolidate      Merge similar memories / 合并相似记忆
+    atlas check                    Verify modules / 检查模块
 """
 
 import argparse
 import logging
+import os
 import sys
 import shlex
 
@@ -157,9 +161,10 @@ def cmd_agents(args: argparse.Namespace):
 
 def cmd_memory(args: argparse.Namespace):
     """记忆操作 / Memory operations"""
-    from atlas_core.core import Atlas
+    from atlas_core.memory_engine import create_memory_engine
 
-    atlas = Atlas(voice_enabled=False, memory_enabled=True)
+    db_path = os.path.expanduser("~/.atlas/memory.db")
+    engine = create_memory_engine(db_path)
 
     subcommand = args.memory_command
     if subcommand == "search":
@@ -168,25 +173,87 @@ def cmd_memory(args: argparse.Namespace):
             print("Error: No search query / 错误：未提供搜索关键词")
             sys.exit(1)
 
-        results = atlas.recall(query, limit=10)
+        query_text = " ".join(query) if isinstance(query, list) else query
+        results = engine.store.recall(query_text, limit=10)
         if not results:
-            print(f"No memories found for: {query}")
-            print(f"未找到相关记忆：{query}")
-            return
+            print(f"No memories found for: {query_text}")
+            print(f"未找到相关记忆：{query_text}")
+        else:
+            print(f"\nMemory search results for / 记忆搜索结果: '{query_text}'")
+            print("=" * 60)
+            for i, m in enumerate(results, 1):
+                print(f"\n  [{i}] Key / 键: {m.get('key', 'N/A')}")
+                print(f"      Type / 类型: {m.get('type', 'N/A')}")
+                print(f"      Content / 内容: {m.get('content', 'N/A')[:150]}")
+                print(f"      Importance / 重要性: {m.get('importance', 0):.2f}")
+                tags = m.get("tags", [])
+                if tags:
+                    print(f"      Tags / 标签: {', '.join(tags)}")
+                related = m.get("related_ids", [])
+                if related:
+                    print(f"      Related / 关联: {related}")
 
-        print(f"\nMemory search results for / 记忆搜索结果: '{query}'")
-        print("=" * 60)
-        for i, m in enumerate(results, 1):
-            print(f"\n  [{i}] Key / 键: {m.get('key', 'N/A')}")
-            print(f"      Type / 类型: {m.get('type', 'N/A')}")
-            print(f"      Content / 内容: {m.get('content', 'N/A')[:150]}")
-            print(f"      Importance / 重要性: {m.get('importance', 0):.2f}")
-            tags = m.get("tags", [])
-            if tags:
-                print(f"      Tags / 标签: {', '.join(tags)}")
+    elif subcommand == "semantic":
+        query = args.query
+        if not query:
+            print("Error: No search query / 错误：未提供搜索文本")
+            sys.exit(1)
+
+        query_text = " ".join(query) if isinstance(query, list) else query
+        results = engine.vector_search.search(query_text, limit=10)
+        if not results:
+            print(f"No semantic results for: {query_text}")
+            print(f"(sentence-transformers not installed or no embeddings stored)")
+        else:
+            print(f"\nSemantic search / 语义搜索: '{query_text}'")
+            print("=" * 60)
+            for i, (mid, score) in enumerate(results, 1):
+                mem = engine.store.get_by_id(mid)
+                if mem:
+                    print(f"\n  [{i}] ID: {mid} (similarity: {score:.2%})")
+                    print(f"      Key / 键: {mem.get('key', 'N/A')}")
+                    print(f"      Content / 内容: {mem.get('content', 'N/A')[:150]}")
+                    print(f"      Importance / 重要性: {mem.get('importance', 0):.2f}")
+
+    elif subcommand == "graph":
+        mid = args.id
+        graph = engine.store.get_memory_graph(mid, depth=2)
+        if not graph:
+            print(f"No memory found with ID: {mid}")
+            print(f"未找到 ID 为 {mid} 的记忆")
+        else:
+            print(f"\nMemory graph for / 记忆图谱 ID: {mid}")
+            print("=" * 60)
+            for gid, node in graph.items():
+                rel_ids = node.get("related", [])
+                rel_str = ", ".join(str(r) for r in rel_ids) if rel_ids else "(none)"
+                print(f"\n  [{gid}] {node.get('type', 'N/A')}")
+                print(f"      Content / 内容: {node.get('content', 'N/A')[:100]}")
+                print(f"      Importance / 重要性: {node.get('importance', 0):.2f}")
+                print(f"      Related / 关联: {rel_str}")
+
+    elif subcommand == "consolidate":
+        print("Running memory consolidation / 开始合并记忆...")
+        stats_before = engine.consolidator.get_stats()
+        print(f"  Before / 合并前: {stats_before['total']} memories, "
+              f"{stats_before['potential_duplicates']} potential duplicates")
+
+        result = engine.consolidator.consolidate(similarity_threshold=0.85)
+        print(f"  Merged / 合并: {result['merged_count']}, "
+              f"Deleted / 删除: {result['deleted_count']}")
+
+        stats_after = engine.consolidator.get_stats()
+        print(f"  After / 合并后: {stats_after['total']} memories")
+
+        print("\nDone / 完成 ✓")
+
     else:
         print(f"Unknown memory command: {subcommand}")
-        print("Usage / 使用方法: atlas memory search <query>")
+        print("Usage / 使用方法:")
+        print("  atlas memory search <query>")
+        print("  atlas memory semantic <query>")
+        print("  atlas memory graph <id>")
+        print("  atlas memory consolidate")
         sys.exit(1)
 
 
@@ -282,7 +349,10 @@ Examples / 示例:
     atlas ask "what is AAPL stock" One-shot query / 单次查询
     atlas info                     System info / 系统信息
     atlas agents                   List agents / 列出Agent
-    atlas memory search "python"   Search memory / 搜索记忆
+    atlas memory search <query>   Search memory / 搜索记忆
+    atlas memory semantic <query> Semantic search / 语义搜索
+    atlas memory graph <id>       Show memory graph / 记忆图谱
+    atlas memory consolidate      Merge similar memories / 合并相似记忆
     atlas check                    Verify modules / 检查模块
         """,
     )
@@ -309,6 +379,11 @@ Examples / 示例:
     mem_sub = mem_parser.add_subparsers(dest="memory_command")
     mem_search = mem_sub.add_parser("search", help="Search memory / 搜索记忆")
     mem_search.add_argument("query", nargs="*", help="Search keywords / 搜索关键词")
+    mem_semantic = mem_sub.add_parser("semantic", help="Semantic search / 语义搜索")
+    mem_semantic.add_argument("query", nargs="*", help="Search text / 搜索文本")
+    mem_graph = mem_sub.add_parser("graph", help="Show memory graph / 记忆图谱")
+    mem_graph.add_argument("id", type=int, help="Memory ID / 记忆 ID")
+    mem_consolidate = mem_sub.add_parser("consolidate", help="Merge similar memories / 合并相似记忆")
 
     # check
     sub.add_parser("check", help="Verify all modules / 检查所有模块")

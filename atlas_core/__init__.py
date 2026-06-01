@@ -24,5 +24,8 @@ from atlas_core.memory_engine import (
     ImportanceScorer,
     PruningStrategy,
     ContextInjector,
+    VectorSearch,
+    MemoryConsolidator,
+    MemoryEngine,
     create_memory_engine,
 )

@@ -20,6 +20,9 @@ from atlas_core.memory_engine import (
     ImportanceScorer,
     PruningStrategy,
     ContextInjector,
+    VectorSearch,
+    MemoryConsolidator,
+    MemoryEngine,
     create_memory_engine,
 )
 
@@ -669,6 +672,348 @@ class TestEdgeCases:
 
 
 # ---------------------------------------------------------------------------
+# Tests: Memory Graph (link / unlink / get_memory_graph)
+# ---------------------------------------------------------------------------
+
+class TestMemoryGraph:
+    """Memory graph association network tests.
+    记忆图谱关联网络测试。"""
+
+    def test_link_memories(self, temp_db):
+        """Test linking two memories bidirectionally.
+        测试双向关联两个记忆。"""
+        mid1 = temp_db.save("node_a", "Content A", type="fact", tags=[], importance=0.5)
+        mid2 = temp_db.save("node_b", "Content B", type="fact", tags=[], importance=0.5)
+
+        result = temp_db.link_memories(mid1, mid2)
+        assert result is True
+
+        # Verify bidirectional link / 验证双向关联
+        m1 = temp_db.get_by_id(mid1)
+        m2 = temp_db.get_by_id(mid2)
+        assert mid2 in m1["related_ids"]
+        assert mid1 in m2["related_ids"]
+
+    def test_link_self_returns_false(self, temp_db):
+        """Test linking a memory to itself returns False.
+        测试关联到自身返回 False。"""
+        mid = temp_db.save("self_node", "Self", type="fact")
+        assert temp_db.link_memories(mid, mid) is False
+
+    def test_link_nonexistent_returns_false(self, temp_db):
+        """Test linking with non-existent IDs returns False.
+        测试关联不存在 ID 返回 False。"""
+        mid = temp_db.save("real_node", "Real", type="fact")
+        assert temp_db.link_memories(mid, 99999) is False
+        assert temp_db.link_memories(99998, 99999) is False
+
+    def test_unlink_memories(self, temp_db):
+        """Test unlinking removes the bidirectional association.
+        测试取消关联移除双向关联。"""
+        mid1 = temp_db.save("node_a", "Content A", type="fact")
+        mid2 = temp_db.save("node_b", "Content B", type="fact")
+        temp_db.link_memories(mid1, mid2)
+
+        result = temp_db.unlink_memories(mid1, mid2)
+        assert result is True
+
+        m1 = temp_db.get_by_id(mid1)
+        m2 = temp_db.get_by_id(mid2)
+        assert mid2 not in m1["related_ids"]
+        assert mid1 not in m2["related_ids"]
+
+    def test_unlink_nonexistent_link(self, temp_db):
+        """Test unlinking memories that were never linked.
+        测试取消未关联的记忆。"""
+        mid1 = temp_db.save("node_a", "A", type="fact")
+        mid2 = temp_db.save("node_b", "B", type="fact")
+        # No link created — should still return True (no-op)
+        result = temp_db.unlink_memories(mid1, mid2)
+        assert result is True
+
+    def test_get_memory_graph_basic(self, temp_db):
+        """Test getting the association graph of a memory.
+        测试获取记忆的关联图谱。"""
+        mid1 = temp_db.save("center", "Center node", type="fact", importance=0.9)
+        mid2 = temp_db.save("leaf_a", "Leaf A", type="fact", importance=0.5)
+        mid3 = temp_db.save("leaf_b", "Leaf B", type="fact", importance=0.3)
+
+        temp_db.link_memories(mid1, mid2)
+        temp_db.link_memories(mid1, mid3)
+
+        graph = temp_db.get_memory_graph(mid1, depth=1)
+        assert mid1 in graph
+        assert mid2 in graph
+        assert mid3 in graph
+        assert graph[mid1]["importance"] == 0.9
+
+    def test_get_memory_graph_isolated(self, temp_db):
+        """Test graph of an isolated memory (no links).
+        测试孤立记忆的图谱（无关联）。"""
+        mid = temp_db.save("loner", "Alone", type="fact")
+        graph = temp_db.get_memory_graph(mid, depth=2)
+        assert mid in graph
+        assert graph[mid]["related"] == []
+
+    def test_get_memory_graph_nonexistent(self, temp_db):
+        """Test graph of a non-existent memory returns empty dict.
+        测试不存在的记忆返回空字典。"""
+        graph = temp_db.get_memory_graph(99999)
+        assert graph == {}
+
+
+# ---------------------------------------------------------------------------
+# Tests: VectorSearch (no sentence-transformers = graceful fallback)
+# ---------------------------------------------------------------------------
+
+class TestVectorSearch:
+    """Vector search tests with sentence-transformers not installed.
+    向量搜索测试（sentence-transformers 未安装时的优雅回退）。"""
+
+    def test_vector_search_unavailable(self, temp_db):
+        """Test that vector search returns empty list when model unavailable.
+        测试模型不可用时返回空列表。"""
+        store = temp_db
+        store.save("test_item", "Important thing to remember", type="fact")
+        vs = VectorSearch(store)
+        results = vs.search("find important things", limit=5)
+        # Without sentence-transformers, should return empty list
+        assert results == []
+
+    def test_cosine_similarity(self):
+        """Test pure Python cosine similarity calculation.
+        测试纯 Python 余弦相似度计算。"""
+        # Identical vectors / 相同向量
+        a = [1.0, 0.0, 0.0]
+        b = [1.0, 0.0, 0.0]
+        assert VectorSearch._cosine_similarity(a, b) == 1.0
+
+        # Orthogonal vectors / 正交向量
+        c = [0.0, 1.0, 0.0]
+        assert VectorSearch._cosine_similarity(a, c) == 0.0
+
+        # Opposite vectors / 相反向量
+        d = [-1.0, 0.0, 0.0]
+        assert VectorSearch._cosine_similarity(a, d) == -1.0
+
+        # Zero vector / 零向量
+        zero = [0.0, 0.0, 0.0]
+        assert VectorSearch._cosine_similarity(a, zero) == 0.0
+
+        # Partial match / 部分匹配
+        e = [1.0, 1.0, 0.0]
+        sim = VectorSearch._cosine_similarity(a, e)
+        assert 0.7 < sim < 0.8  # cos(45°) ≈ 0.707
+
+
+# ---------------------------------------------------------------------------
+# Tests: MemoryConsolidator
+# ---------------------------------------------------------------------------
+
+class TestConsolidation:
+    """Memory consolidation tests.
+    记忆合并测试。"""
+
+    def test_consolidate_no_duplicates(self, temp_db):
+        """Test consolidation with no similar memories.
+        测试无相似记忆时合并空操作。"""
+        store = temp_db
+        store.save("unique_1", "Completely different content here", type="fact")
+        store.save("unique_2", "Another totally unrelated thing", type="fact")
+
+        consolidator = MemoryConsolidator(store)
+        result = consolidator.consolidate(similarity_threshold=0.85)
+        assert result["merged_count"] == 0
+        assert result["deleted_count"] == 0
+
+    def test_consolidate_duplicates(self, temp_db):
+        """Test merging highly similar memories.
+        测试合并高度相似的记忆。"""
+        store = temp_db
+        # Create two very similar memories / 创建两个非常相似的记忆
+        store.save("dup_1", "This is a note about something important", type="fact",
+                    tags=["important"], importance=0.9)
+        store.save("dup_2", "This is a note about something important", type="fact",
+                    tags=["note"], importance=0.3)
+
+        consolidator = MemoryConsolidator(store)
+        result = consolidator.consolidate(similarity_threshold=0.85)
+        assert result["merged_count"] >= 1
+        assert result["deleted_count"] >= 1
+
+        # Verify the high-importance one survived / 验证高重要性的保留了
+        stats = store.stats()
+        assert stats["total_count"] >= 1
+
+        # The survivor should have merged tags / 幸存者应有合并后的标签
+        all_records = store.recall("important")
+        assert len(all_records) >= 1
+
+    def test_consolidate_stats(self, temp_db):
+        """Test consolidation statistics.
+        测试合并统计信息。"""
+        store = temp_db
+        store.save("a", "Hello world", type="fact", importance=0.5)
+        store.save("b", "Completely different", type="fact", importance=0.5)
+
+        consolidator = MemoryConsolidator(store)
+        stats = consolidator.get_stats()
+        assert stats["total"] == 2
+        assert "potential_duplicates" in stats
+        assert "avg_similarity" in stats
+
+
+# ---------------------------------------------------------------------------
+# Tests: Memory Decay (PruningStrategy.decay)
+# ---------------------------------------------------------------------------
+
+class TestMemoryDecay:
+    """Memory decay tests.
+    记忆衰减测试。"""
+
+    def test_decay_old_unaccessed(self, temp_db):
+        """Test decay reduces importance of old unaccessed memories.
+        测试衰减降低长期未访问记忆的重要性。"""
+        store = temp_db
+        # Create a memory with a very old timestamp / 创建一条时间戳很旧的记忆
+        now = time.time()
+        with store._lock:
+            cur = store._conn.cursor()
+            cur.execute(
+                "INSERT INTO memories (key, content, type, tags, importance, created_at, updated_at, access_count) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+                ("old_decay", "old content not accessed", "fact", "[]", 0.8, now - 86400 * 90, now - 86400 * 90),
+            )
+            store._conn.commit()
+
+        pruner = PruningStrategy(store)
+        affected = pruner.decay(decay_rate=0.1, max_age_days=30)
+        assert affected >= 1
+
+        # Verify importance decreased / 验证重要性降低
+        retrieved = store.recall("old_decay")
+        for r in retrieved:
+            if r["key"] == "old_decay":
+                assert r["importance"] < 0.8
+                break
+
+    def test_decay_no_effect_on_recent(self, temp_db):
+        """Test decay does not affect recent memories.
+        测试衰减不影响近期记忆。"""
+        store = temp_db
+        mid = store.save("recent", "Recent memory", type="fact", importance=0.4)
+        retrieved_orig = store.get_by_id(mid)
+        orig_imp = retrieved_orig["importance"]
+
+        pruner = PruningStrategy(store)
+        # Recent memory should not decay / 近期记忆不应衰减
+        affected = pruner.decay(decay_rate=0.1, max_age_days=30)
+
+        retrieved = store.get_by_id(mid)
+        assert retrieved["importance"] == pytest.approx(orig_imp, rel=1e-6)
+
+    def test_decay_floor(self, temp_db):
+        """Test that decay has a floor at 0.05.
+        测试衰减下限为 0.05。"""
+        store = temp_db
+        now = time.time()
+        with store._lock:
+            cur = store._conn.cursor()
+            # Already very low importance, very old / 已经很低的重要性，很旧
+            cur.execute(
+                "INSERT INTO memories (key, content, type, tags, importance, created_at, updated_at, access_count) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+                ("floor_test", "barely important", "fact", "[]", 0.06, now - 86400 * 90, now - 86400 * 90),
+            )
+            store._conn.commit()
+
+        pruner = PruningStrategy(store)
+        pruner.decay(decay_rate=0.5, max_age_days=30)
+
+        retrieved = store.recall("barely")
+        for r in retrieved:
+            if r["key"] == "floor_test":
+                # Should not go below 0.05 / 不应低于 0.05
+                assert r["importance"] >= 0.05
+                break
+
+
+# ---------------------------------------------------------------------------
+# Tests: MemoryEngine container
+# ---------------------------------------------------------------------------
+
+class TestMemoryEngineContainer:
+    """MemoryEngine container tests.
+    MemoryEngine 容器测试。"""
+
+    def test_container_iterable(self):
+        """Test that MemoryEngine unpacks as 4 components.
+        测试 MemoryEngine 可以解包为 4 个组件。"""
+        tmpdir = tempfile.mkdtemp()
+        db_path = os.path.join(tmpdir, "container_test.db")
+        try:
+            engine = create_memory_engine(db_path)
+            assert isinstance(engine, MemoryEngine)
+            store, scorer, pruner, injector = engine
+            assert isinstance(store, MemoryStore)
+            assert isinstance(pruner, PruningStrategy)
+            assert isinstance(injector, ContextInjector)
+            assert engine.vector_search is not None
+            assert engine.consolidator is not None
+            engine.store.close()
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_container_extra_components(self):
+        """Test that container has all 6 components accessible as attributes.
+        测试容器可以通过属性访问全部 6 个组件。"""
+        tmpdir = tempfile.mkdtemp()
+        db_path = os.path.join(tmpdir, "container_extra_test.db")
+        try:
+            engine = create_memory_engine(db_path)
+            assert hasattr(engine, 'store')
+            assert hasattr(engine, 'scorer')
+            assert hasattr(engine, 'pruner')
+            assert hasattr(engine, 'injector')
+            assert hasattr(engine, 'vector_search')
+            assert hasattr(engine, 'consolidator')
+            engine.store.close()
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Tests: related_ids in save/get_by_id/export
+# ---------------------------------------------------------------------------
+
+class TestRelatedIds:
+    """Tests for related_ids field in save/get_by_id/export.
+    related_ids 字段在保存/获取/导出中的测试。"""
+
+    def test_save_with_related_ids(self, temp_db):
+        """Test saving a memory with explicit related_ids.
+        测试保存带显式 related_ids 的记忆。"""
+        mid1 = temp_db.save("first", "First", type="fact")
+        mid2 = temp_db.save("second", "Second", type="fact", related_ids=[mid1])
+        retrieved = temp_db.get_by_id(mid2)
+        assert mid1 in retrieved["related_ids"]
+
+    def test_export_includes_related_ids(self, populated_store):
+        """Test that export JSON includes related_ids field.
+        测试导出 JSON 包含 related_ids 字段。"""
+        tmpfile = tempfile.mktemp(suffix=".json")
+        try:
+            count = populated_store.export_json(tmpfile)
+            with open(tmpfile, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for mem in data["memories"]:
+                assert "related_ids" in mem
+                assert isinstance(mem["related_ids"], list)
+        finally:
+            if os.path.exists(tmpfile):
+                os.remove(tmpfile)
+
+
 # Run tests directly / 直接运行测试
 # ---------------------------------------------------------------------------
 
