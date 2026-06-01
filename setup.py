@@ -16,11 +16,22 @@ setup(
     python_requires=">=3.10",
     install_requires=[
         "pydantic>=2.0",
+        "requests>=2.31",
     ],
     extras_require={
-        "dev": ["pytest>=7.0", "black", "ruff"],
-        "voice": ["speechrecognition", "pyttsx3", "pyaudio"],
+        "dev": ["pytest>=7.0", "ruff>=0.3", "build>=1.0"],
+        "voice": [
+            "SpeechRecognition>=3.10",
+            "pyttsx3>=2.90",
+        ],
         "vector": ["sentence-transformers>=2.0"],
+        "webui": ["flask>=3.0"],
+        "all": [
+            "SpeechRecognition>=3.10",
+            "pyttsx3>=2.90",
+            "sentence-transformers>=2.0",
+            "flask>=3.0",
+        ],
     },
     entry_points={
         "console_scripts": [

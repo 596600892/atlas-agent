@@ -334,6 +334,83 @@ def cmd_check(args: argparse.Namespace):
 
 
 # ---------------------------------------------------------------------------
+# WebUI / Electron 命令
+# ---------------------------------------------------------------------------
+
+
+def cmd_web(args: argparse.Namespace):
+    """启动 WebUI 服务器 / Start WebUI server"""
+    host = getattr(args, "host", "127.0.0.1")
+    port = getattr(args, "port", 8640)
+    debug = getattr(args, "debug", False)
+
+    try:
+        from atlas_core.webui import run_server
+
+        run_server(host=host, port=port, debug=debug)
+    except ImportError as e:
+        print(
+            "Error: Flask is required for WebUI.\n"
+            "Install with: pip install atlas-agent[webui]  or  pip install flask"
+        )
+        sys.exit(1)
+
+
+def cmd_electron(args: argparse.Namespace):
+    """启动 Electron 桌面应用 / Launch Electron desktop app"""
+    import shutil
+    import subprocess
+
+    electron_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "webui",
+        "electron",
+    )
+
+    if not os.path.exists(os.path.join(electron_dir, "node_modules")):
+        print("Electron dependencies not found. Installing...")
+        result = subprocess.run(
+            ["npm", "install"],
+            cwd=electron_dir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"npm install failed:\n{result.stderr}")
+            sys.exit(1)
+
+    # 先启动 WebUI 后端
+    print("Starting Atlas WebUI backend...")
+    from atlas_core.webui import create_app
+
+    app = create_app()
+
+    import threading
+
+    def _run():
+        app.run(host="127.0.0.1", port=8640, debug=False, use_reloader=False)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+    import time
+
+    time.sleep(1)
+
+    # 启动 Electron
+    print("Launching Electron desktop app...")
+    electron_bin = shutil.which("electron")
+    if electron_bin:
+        subprocess.run([electron_bin, electron_dir])
+    else:
+        print(
+            "Electron not found on PATH. Try:\n"
+            "  cd webui/electron && npx electron ."
+        )
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
 # 主入口 / Main entry point
 # ---------------------------------------------------------------------------
 
@@ -385,6 +462,15 @@ Examples / 示例:
     mem_graph.add_argument("id", type=int, help="Memory ID / 记忆 ID")
     mem_consolidate = mem_sub.add_parser("consolidate", help="Merge similar memories / 合并相似记忆")
 
+    # web
+    web_parser = sub.add_parser("web", help="Launch WebUI / 启动 Web 界面")
+    web_parser.add_argument("--host", default="127.0.0.1", help="Bind host")
+    web_parser.add_argument("--port", type=int, default=8640, help="Bind port")
+    web_parser.add_argument("--debug", action="store_true", help="Debug mode")
+
+    # electron
+    sub.add_parser("electron", help="Launch Electron desktop app / 启动桌面应用")
+
     # check
     sub.add_parser("check", help="Verify all modules / 检查所有模块")
 
@@ -412,6 +498,10 @@ Examples / 示例:
         cmd_memory(args)
     elif cmd == "check":
         cmd_check(args)
+    elif cmd == "web":
+        cmd_web(args)
+    elif cmd == "electron":
+        cmd_electron(args)
     else:
         parser.print_help()
 

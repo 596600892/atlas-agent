@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlas Agent — WebUI</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🧠</text></svg>">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h1 class="logo">🧠 Atlas</h1>
+        <span class="badge" id="versionBadge">v0.5.0</span>
+      </div>
+
+      <div class="status-bar" id="statusBar">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Initializing...</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-btn active" data-tab="chat" onclick="switchTab('chat')">
+          💬 Chat
+        </button>
+        <button class="nav-btn" data-tab="agents" onclick="switchTab('agents')">
+          🤖 Agents
+        </button>
+        <button class="nav-btn" data-tab="routes" onclick="switchTab('routes')">
+          🗺️ Routes
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="clear-btn" onclick="clearChat()">🗑️ Clear Chat</button>
+        <div class="theme-toggle">
+          <button onclick="toggleTheme()">🌙 Dark</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+      <!-- Chat Tab -->
+      <div class="tab-content active" id="tab-chat">
+        <div class="chat-messages" id="chatMessages">
+          <div class="message atlas">
+            <div class="avatar">🧠</div>
+            <div class="bubble">
+              <p>Hello! I'm Atlas. How can I help you today?</p>
+              <p class="hint">Try: "what is the stock market doing?" or "write a screenplay"</p>
+              <span class="time">just now</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-bar">
+          <textarea id="chatInput" rows="1" placeholder="Type your message..." 
+                    onkeydown="handleKeyDown(event)" autofocus></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+            ➤
+          </button>
+        </div>
+      </div>
+
+      <!-- Agents Tab -->
+      <div class="tab-content" id="tab-agents">
+        <div class="tab-header">
+          <h2>🤖 Registered Agents</h2>
+          <p class="subtitle">14 specialized agents powering Atlas</p>
+        </div>
+        <div class="agents-grid" id="agentsGrid">
+          <div class="loading">Loading agents...</div>
+        </div>
+      </div>
+
+      <!-- Routes Tab -->
+      <div class="tab-content" id="tab-routes">
+        <div class="tab-header">
+          <h2>🗺️ Route Table</h2>
+          <p class="subtitle">Intent routing patterns: domain → agent mapping</p>
+        </div>
+        <div class="routes-container" id="routesContainer">
+          <div class="loading">Loading routes...</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

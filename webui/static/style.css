@@ -1,0 +1,401 @@
+/* ───────────────────────────────────────────
+   Atlas Agent WebUI — Stylesheet
+   ─────────────────────────────────────────── */
+
+:root {
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --sidebar: #1a1a2e;
+  --sidebar-text: #e0e0e0;
+  --primary: #6c63ff;
+  --primary-hover: #5a52e0;
+  --text: #1a1a2e;
+  --text-secondary: #666;
+  --border: #e0e0e0;
+  --user-bubble: #6c63ff;
+  --user-text: #fff;
+  --atlas-bubble: #f0f0ff;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+  --bg: #0f0f23;
+  --surface: #1a1a2e;
+  --sidebar: #16162a;
+  --sidebar-text: #c0c0d0;
+  --text: #e0e0f0;
+  --text-secondary: #888;
+  --border: #2a2a4a;
+  --user-bubble: #7c74ff;
+  --atlas-bubble: #1e1e3a;
+  --shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+/* ── Sidebar ──────────────────────────────── */
+
+.sidebar {
+  width: 240px;
+  background: var(--sidebar);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.logo {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.badge {
+  font-size: 0.7rem;
+  background: var(--primary);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.05);
+  border-radius: var(--radius-sm);
+  margin-bottom: 20px;
+  font-size: 0.85rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.error { background: #f87171; }
+.status-dot.loading { background: #fbbf24; animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.nav-btn {
+  background: none;
+  border: none;
+  color: var(--sidebar-text);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+}
+
+.nav-btn:hover { background: rgba(255,255,255,0.08); }
+.nav-btn.active { background: rgba(108,99,255,0.2); color: #fff; font-weight: 600; }
+
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.clear-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--sidebar-text);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s;
+}
+
+.clear-btn:hover { background: rgba(255,80,80,0.15); border-color: rgba(255,80,80,0.3); }
+
+.theme-toggle button {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--sidebar-text);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.8rem;
+  width: 100%;
+}
+
+/* ── Main Content ─────────────────────────── */
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tab-content {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+}
+
+.tab-content.active { display: flex; }
+
+/* ── Chat ──────────────────────────────────── */
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.message {
+  display: flex;
+  gap: 12px;
+  max-width: 80%;
+  animation: fadeIn 0.3s;
+}
+
+.message.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.bubble {
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-width: 100%;
+}
+
+.message.user .bubble {
+  background: var(--user-bubble);
+  color: var(--user-text);
+  border-bottom-right-radius: 4px;
+}
+
+.message.atlas .bubble {
+  background: var(--atlas-bubble);
+  border-bottom-left-radius: 4px;
+}
+
+.bubble p { margin-bottom: 4px; line-height: 1.5; }
+.bubble p:last-child { margin-bottom: 0; }
+.bubble .hint { font-size: 0.8rem; opacity: 0.7; }
+.bubble .time {
+  display: block;
+  font-size: 0.7rem;
+  opacity: 0.5;
+  margin-top: 6px;
+}
+
+.intent-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  background: rgba(108,99,255,0.15);
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-top: 6px;
+  color: var(--primary);
+}
+
+/* ── Chat Input ────────────────────────────── */
+
+.chat-input-bar {
+  display: flex;
+  gap: 8px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.chat-input-bar textarea {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  max-height: 120px;
+}
+
+.chat-input-bar textarea:focus {
+  border-color: var(--primary);
+}
+
+.send-btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  flex-shrink: 0;
+}
+
+.send-btn:hover { background: var(--primary-hover); }
+.send-btn:active { transform: scale(0.95); }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Agents Tab ────────────────────────────── */
+
+.tab-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-header h2 { font-size: 1.3rem; }
+.tab-header .subtitle { color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px; }
+
+.agents-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.agent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s;
+}
+
+.agent-card:hover { transform: translateY(-2px); }
+
+.agent-card h3 { font-size: 1rem; margin-bottom: 4px; }
+.agent-card .desc { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px; }
+.agent-card .caps { display: flex; flex-wrap: wrap; gap: 4px; }
+.agent-card .cap-tag {
+  font-size: 0.7rem;
+  background: var(--atlas-bubble);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* ── Routes Tab ────────────────────────────── */
+
+.routes-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.route-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.route-header {
+  padding: 12px 16px;
+  background: var(--atlas-bubble);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.route-body {
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* ── Loading ───────────────────────────────── */
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-secondary);
+  animation: pulse 1.5s infinite;
+}
+
+/* ── Responsive ────────────────────────────── */
+
+@media (max-width: 768px) {
+  .sidebar { width: 64px; padding: 12px 8px; }
+  .sidebar-header h1 { display: none; }
+  .badge { display: none; }
+  .nav-btn { font-size: 1.2rem; padding: 10px; text-align: center; }
+  .status-bar { display: none; }
+  .message { max-width: 90%; }
+}
