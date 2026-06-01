@@ -1,0 +1,5 @@
+# Atlas — Core Integration Layer
+# No production dependencies — all functionality comes from agent modules
+# This package only provides integration interfaces
+
+pytest>=7.0
